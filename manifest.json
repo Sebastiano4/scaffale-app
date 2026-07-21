@@ -1,7 +1,7 @@
 {
-  "name": "BookNest — la tua libreria PDF",
+  "name": "BookNest — your PDF library",
   "short_name": "BookNest",
-  "description": "Il nido dei tuoi libri: leggi i tuoi PDF con segnalibri, citazioni, evidenziazioni, statistiche e ricerca nel testo.",
+  "description": "A nest for your books: read your PDFs with bookmarks, quotes, highlights, statistics and full-text search.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

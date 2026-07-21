@@ -109,7 +109,7 @@ function guessFromFilename(filename) {
     return { title: titleCase(a), author: titleCase(b) };
   }
 
-  return { title: titleCase(base) || 'Senza titolo', author: '' };
+  return { title: titleCase(base) || 'Untitled', author: '' };
 }
 
 async function extractMetadata(pdfDoc, filename) {
@@ -146,7 +146,7 @@ async function renderThumbnail(pdfDoc) {
    ====================================================================== */
 const state = {
   books: [],              // cached list from DB
-  activeCategory: 'Tutti',
+  activeCategory: 'All',
   activeStatus: 'all',    // 'all' | 'toread' | 'reading' | 'read'
   sortBy: 'recent',       // 'recent' | 'title' | 'author' | 'progress'
   librarySearch: '',
@@ -172,7 +172,7 @@ function bookStatus(b) {
   if (b.lastOpenedAt) return 'reading';
   return 'toread';
 }
-const STATUS_LABELS = { all: 'Tutti', toread: 'Da leggere', reading: 'In lettura', read: 'Letti' };
+const STATUS_LABELS = { all: 'All', toread: 'To read', reading: 'Reading', read: 'Read' };
 
 /* ======================================================================
    Reading stats (stored in localStorage)
@@ -230,21 +230,21 @@ const Goal = {
       if (g.period === 'year') {
         const y = now.getFullYear();
         done = books.filter((b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === y).length;
-        label = g.target + ' libri nel ' + y;
+        label = g.target + ' books in ' + y;
       } else {
         const weekAgo = Date.now() - 7 * 864e5;
         done = books.filter((b) => b.finishedAt && b.finishedAt >= weekAgo).length;
-        label = g.target + ' libri a settimana';
+        label = g.target + ' books per week';
       }
     } else { // pages
       const s = Stats.load();
       if (g.period === 'year') {
         const y = String(now.getFullYear());
         done = Object.entries(s.days).reduce((sum, [k, v]) => k.startsWith(y) ? sum + (v.pages || 0) : sum, 0);
-        label = g.target + ' pagine nel ' + now.getFullYear();
+        label = g.target + ' pages in ' + now.getFullYear();
       } else {
         done = Stats.summary().wPages;
-        label = g.target + ' pagine a settimana';
+        label = g.target + ' pages per week';
       }
     }
     return { done, target: g.target, label, pct: Math.min(100, Math.round((done / g.target) * 100)) };
@@ -315,8 +315,8 @@ $('#sort-select').addEventListener('change', (e) => {
 function sortBooks(list) {
   const by = state.sortBy;
   const copy = list.slice();
-  if (by === 'title') copy.sort((a, b) => a.title.localeCompare(b.title, 'it'));
-  else if (by === 'author') copy.sort((a, b) => (a.author || 'zzz').localeCompare(b.author || 'zzz', 'it'));
+  if (by === 'title') copy.sort((a, b) => a.title.localeCompare(b.title, 'en'));
+  else if (by === 'author') copy.sort((a, b) => (a.author || 'zzz').localeCompare(b.author || 'zzz', 'en'));
   else if (by === 'progress') copy.sort((a, b) =>
     ((b.lastPage / (b.numPages || 1)) - (a.lastPage / (a.numPages || 1))));
   else copy.sort((a, b) => (b.lastOpenedAt || b.addedAt) - (a.lastOpenedAt || a.addedAt));
@@ -329,8 +329,8 @@ function renderCategoryBar() {
   if (cats.length === 0) { bar.hidden = true; bar.innerHTML = ''; return; }
   bar.hidden = false;
   bar.innerHTML = '';
-  const allChip = el('button', 'chip' + (state.activeCategory === 'Tutti' ? ' chip--active' : ''), 'Tutti');
-  allChip.onclick = () => { state.activeCategory = 'Tutti'; renderCategoryBar(); renderGrid(); };
+  const allChip = el('button', 'chip' + (state.activeCategory === 'All' ? ' chip--active' : ''), 'All');
+  allChip.onclick = () => { state.activeCategory = 'All'; renderCategoryBar(); renderGrid(); };
   bar.appendChild(allChip);
   cats.forEach((c) => {
     const chip = el('button', 'chip' + (state.activeCategory === c ? ' chip--active' : ''), c);
@@ -362,7 +362,7 @@ function renderGrid() {
   const q = state.librarySearch.trim().toLowerCase();
   let list = sortBooks(state.books);
   if (state.activeStatus !== 'all') list = list.filter((b) => bookStatus(b) === state.activeStatus);
-  if (state.activeCategory !== 'Tutti') list = list.filter((b) => b.category === state.activeCategory);
+  if (state.activeCategory !== 'All') list = list.filter((b) => b.category === state.activeCategory);
   if (q) list = list.filter((b) => (b.title + ' ' + b.author).toLowerCase().includes(q));
 
   if (list.length === 0) {
@@ -396,14 +396,14 @@ function renderGrid() {
     cover.appendChild(ribbon);
 
     const st = bookStatus(book);
-    if (st === 'read') cover.appendChild(el('div', 'book-badge book-badge--read', 'Letto'));
+    if (st === 'read') cover.appendChild(el('div', 'book-badge book-badge--read', 'Read'));
     else if (st === 'reading' && pct > 0) cover.appendChild(el('div', 'book-badge book-badge--reading', pct + '%'));
 
     cover.onclick = () => openReader(book.id);
 
     const meta = el('div', 'book-meta');
     meta.appendChild(el('p', 'book-title', escapeHtml(book.title)));
-    meta.appendChild(el('p', 'book-author', escapeHtml(book.author || 'Autore sconosciuto')));
+    meta.appendChild(el('p', 'book-author', escapeHtml(book.author || 'Unknown author')));
     if (book.rating > 0) {
       meta.appendChild(el('p', 'book-stars', '★'.repeat(book.rating) + '<span class="book-stars__off">' + '★'.repeat(5 - book.rating) + '</span>'));
     }
@@ -446,12 +446,12 @@ $('#file-input').addEventListener('change', async (e) => {
   e.target.value = '';
   for (const file of files) {
     try { await addBookFromFile(file); }
-    catch (err) { console.error(err); showToast('Non sono riuscito ad aprire ' + file.name); }
+    catch (err) { console.error(err); showToast("Couldn't open " + file.name); }
   }
 });
 
 async function addBookFromFile(file) {
-  showToast('Aggiungo ' + file.name + '…', 4000);
+  showToast('Adding ' + file.name + '…', 4000);
   const buf = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
   const { title, author } = await extractMetadata(pdfDoc, file.name);
@@ -474,7 +474,7 @@ async function addBookFromFile(file) {
   };
   await DB.put(book);
   await loadLibrary();
-  showToast('Aggiunto: ' + title);
+  showToast('Added: ' + title);
 }
 
 /* ---- metadata modal (used for add-fallback edits and later edits) ---- */
@@ -482,7 +482,7 @@ let modalCtx = null; // { mode: 'edit', book }
 
 function fmtDate(ts) {
   if (!ts) return '—';
-  try { return new Date(ts).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  try { return new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }); }
   catch (e) { return '—'; }
 }
 
@@ -494,7 +494,7 @@ function paintStars(rating) {
 
 function openMetadataModal({ mode, book }) {
   modalCtx = { mode, book, rating: book.rating || 0 };
-  $('#metadata-modal-title').textContent = mode === 'edit' ? 'Modifica libro' : 'Conferma i dati del libro';
+  $('#metadata-modal-title').textContent = mode === 'edit' ? 'Edit book' : 'Confirm the book details';
   $('#meta-title').value = book.title || '';
   $('#meta-author').value = book.author || '';
   $('#meta-category').value = book.category || '';
@@ -506,9 +506,9 @@ function openMetadataModal({ mode, book }) {
   if (mode === 'edit' && (book.startedAt || book.finishedAt || book.addedAt)) {
     dates.hidden = false;
     dates.innerHTML =
-      '<span>Aggiunto: ' + fmtDate(book.addedAt) + '</span>' +
-      (book.startedAt ? '<span>Iniziato: ' + fmtDate(book.startedAt) + '</span>' : '') +
-      (book.finishedAt ? '<span>Finito: ' + fmtDate(book.finishedAt) + '</span>' : '');
+      '<span>Added: ' + fmtDate(book.addedAt) + '</span>' +
+      (book.startedAt ? '<span>Started: ' + fmtDate(book.startedAt) + '</span>' : '') +
+      (book.finishedAt ? '<span>Finished: ' + fmtDate(book.finishedAt) + '</span>' : '');
   } else {
     dates.hidden = true;
   }
@@ -517,17 +517,17 @@ function openMetadataModal({ mode, book }) {
   let delBtn = document.getElementById('meta-delete');
   if (mode === 'edit') {
     if (!delBtn) {
-      delBtn = el('button', 'btn btn--ghost', 'Elimina libro');
+      delBtn = el('button', 'btn btn--ghost', 'Delete book');
       delBtn.id = 'meta-delete';
       delBtn.style.marginTop = '4px';
       delBtn.style.width = '100%';
       $('.modal__card').appendChild(delBtn);
       delBtn.onclick = async () => {
-        if (!confirm('Eliminare "' + modalCtx.book.title + '" dallo scaffale?')) return;
+        if (!confirm('Delete "' + modalCtx.book.title + '" from the shelf?')) return;
         await DB.delete(modalCtx.book.id);
         $('#metadata-modal').hidden = true;
         await loadLibrary();
-        showToast('Libro eliminato');
+        showToast('Book deleted');
       };
     }
     delBtn.hidden = false;
@@ -555,7 +555,7 @@ $('#meta-rating-clear').addEventListener('click', () => {
 $('#meta-save').addEventListener('click', async () => {
   if (!modalCtx) return;
   const book = modalCtx.book;
-  book.title = $('#meta-title').value.trim() || 'Senza titolo';
+  book.title = $('#meta-title').value.trim() || 'Untitled';
   book.author = $('#meta-author').value.trim();
   book.category = $('#meta-category').value.trim();
   book.review = $('#meta-review').value.trim();
@@ -574,7 +574,7 @@ $('#meta-save').addEventListener('click', async () => {
   await DB.put(book);
   $('#metadata-modal').hidden = true;
   await loadLibrary();
-  showToast('Salvato');
+  showToast('Saved');
 });
 
 /* ======================================================================
@@ -604,8 +604,8 @@ function base64ToBlob(b64) {
 $('#menu-export').addEventListener('click', async () => {
   $('#library-menu').hidden = true;
   const books = await DB.all();
-  if (books.length === 0) { showToast('La libreria è vuota, niente da esportare'); return; }
-  showToast('Preparo il backup… può volerci un momento', 6000);
+  if (books.length === 0) { showToast('The library is empty, nothing to export'); return; }
+  showToast('Preparing the backup… this may take a moment', 6000);
   try {
     const out = [];
     for (const b of books) {
@@ -622,10 +622,10 @@ $('#menu-export').addEventListener('click', async () => {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-    showToast('Backup scaricato: ' + out.length + (out.length === 1 ? ' libro' : ' libri'));
+    showToast('Backup downloaded: ' + out.length + (out.length === 1 ? ' book' : ' books'));
   } catch (e) {
     console.error(e);
-    showToast('Errore durante il backup');
+    showToast('Error during backup');
   }
 });
 
@@ -637,10 +637,10 @@ $('#import-input').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  showToast('Importo il backup…', 6000);
+  showToast('Importing the backup…', 6000);
   try {
     const data = JSON.parse(await file.text());
-    if (!data || data.app !== 'BookNest' || !Array.isArray(data.books)) throw new Error('formato non valido');
+    if (!data || data.app !== 'BookNest' || !Array.isArray(data.books)) throw new Error('invalid format');
     let count = 0;
     for (const entry of data.books) {
       const { fileB64, ...meta } = entry;
@@ -658,10 +658,10 @@ $('#import-input').addEventListener('change', async (e) => {
       Stats.save(cur);
     }
     await loadLibrary();
-    showToast('Importati ' + count + (count === 1 ? ' libro' : ' libri'));
+    showToast('Imported ' + count + (count === 1 ? ' book' : ' books'));
   } catch (err) {
     console.error(err);
-    showToast('File di backup non valido');
+    showToast('Invalid backup file');
   }
 });
 
@@ -705,12 +705,12 @@ function renderHistoryChart(container) {
     const col = el('div', 'chart__col');
     const bar = el('div', 'chart__bar' + (d.pages === 0 ? ' chart__bar--empty' : ''));
     bar.style.height = Math.max(d.pages === 0 ? 3 : 6, Math.round((d.pages / max) * 100)) + '%';
-    bar.title = d.k + ': ' + d.pages + ' pagine';
+    bar.title = d.k + ': ' + d.pages + ' pages';
     col.appendChild(bar);
     chart.appendChild(col);
   });
   container.appendChild(chart);
-  container.appendChild(el('div', 'chart__caption', 'Pagine lette · ultimi 14 giorni'));
+  container.appendChild(el('div', 'chart__caption', 'Pages read · last 14 days'));
 }
 
 function renderHeatmap(container) {
@@ -731,11 +731,11 @@ function renderHeatmap(container) {
     const key = dayKeyOf(dt);
     const pages = (s.days[key] && s.days[key].pages) || 0;
     cell.dataset.level = pages === 0 ? 0 : Math.min(4, Math.ceil((pages / max) * 4));
-    cell.title = key + ': ' + pages + ' pagine';
+    cell.title = key + ': ' + pages + ' pages';
     col.appendChild(cell);
   }
   container.appendChild(grid);
-  container.appendChild(el('div', 'chart__caption', 'Costanza · ultime 13 settimane'));
+  container.appendChild(el('div', 'chart__caption', 'Consistency · last 13 weeks'));
 }
 
 function openGoalEditor(rerender) {
@@ -751,23 +751,23 @@ function openGoalEditor(rerender) {
     wrap.appendChild(sel);
     return wrap;
   };
-  host.appendChild(mk('goal-type', 'Conta', [['books', 'Libri'], ['pages', 'Pagine']], g.type));
-  host.appendChild(mk('goal-period', 'Periodo', [['week', 'a settimana'], ['year', "quest'anno"]], g.period));
+  host.appendChild(mk('goal-type', 'Count', [['books', 'Books'], ['pages', 'Pages']], g.type));
+  host.appendChild(mk('goal-period', 'Period', [['week', 'per week'], ['year', 'this year']], g.period));
   const numWrap = el('label', 'goal-field');
-  numWrap.appendChild(el('span', null, 'Obiettivo'));
+  numWrap.appendChild(el('span', null, 'Goal'));
   const num = el('input'); num.id = 'goal-target'; num.type = 'number'; num.min = '1'; num.value = g.target;
   numWrap.appendChild(num);
   host.appendChild(numWrap);
   const actions = el('div', 'goal-editor__actions');
-  const save = el('button', 'btn btn--primary btn--sm', 'Salva obiettivo');
+  const save = el('button', 'btn btn--primary btn--sm', 'Save goal');
   save.onclick = () => {
     const t = parseInt($('#goal-target').value, 10);
-    if (isNaN(t) || t < 1) { showToast('Inserisci un numero valido'); return; }
+    if (isNaN(t) || t < 1) { showToast('Enter a valid number'); return; }
     Goal.save({ type: $('#goal-type').value, period: $('#goal-period').value, target: t });
     host.hidden = true;
     rerender();
   };
-  const remove = el('button', 'btn btn--ghost btn--sm', 'Rimuovi');
+  const remove = el('button', 'btn btn--ghost btn--sm', 'Remove');
   remove.onclick = () => { Goal.clear(); host.hidden = true; rerender(); };
   actions.appendChild(save); actions.appendChild(remove);
   host.appendChild(actions);
@@ -794,12 +794,12 @@ function renderStats() {
     const fill = el('div', 'goal__fill'); fill.style.width = prog.pct + '%';
     barWrap.appendChild(fill);
     goalBox.appendChild(barWrap);
-    goalBox.appendChild(el('div', 'goal__meta', prog.done + ' / ' + prog.target + (prog.pct >= 100 ? ' · raggiunto! 🎉' : ' · ' + prog.pct + '%')));
-    const edit = el('button', 'goal__edit', 'Modifica obiettivo');
+    goalBox.appendChild(el('div', 'goal__meta', prog.done + ' / ' + prog.target + (prog.pct >= 100 ? ' · reached! 🎉' : ' · ' + prog.pct + '%')));
+    const edit = el('button', 'goal__edit', 'Edit goal');
     edit.onclick = () => openGoalEditor(renderStats);
     goalBox.appendChild(edit);
   } else {
-    const setBtn = el('button', 'goal__edit', '＋ Imposta un obiettivo di lettura');
+    const setBtn = el('button', 'goal__edit', '＋ Set a reading goal');
     setBtn.onclick = () => openGoalEditor(renderStats);
     goalBox.appendChild(setBtn);
   }
@@ -815,10 +815,10 @@ function renderStats() {
     t.appendChild(el('div', 'stat-tile__small', small));
     tiles.appendChild(t);
   };
-  tile(String(s.today.pages), 'pagine oggi');
-  tile(String(s.streak), s.streak === 1 ? 'giorno di fila' : 'giorni di fila');
-  tile(String(finished), finished === 1 ? 'libro finito' : 'libri finiti');
-  tile(String(inProgress), 'in lettura');
+  tile(String(s.today.pages), 'pages today');
+  tile(String(s.streak), s.streak === 1 ? 'day streak' : 'days streak');
+  tile(String(finished), finished === 1 ? 'book finished' : 'books finished');
+  tile(String(inProgress), 'reading');
   body.appendChild(tiles);
 
   // --- history chart + heatmap ---
@@ -835,11 +835,11 @@ function renderStats() {
     r.appendChild(el('span', 'stat-row__value', value));
     rows.appendChild(r);
   };
-  row('Ultimi 7 giorni', s.wPages + ' pagine · ' + fmtMinutes(s.wSeconds));
-  row('Totale letto', totals.totalPages + ' pagine · ' + fmtMinutes(totals.totalSeconds));
-  if (speed > 0) row('Velocità media', Math.round(speed) + ' pagine/ora');
-  if (author) row('Autore più letto', author.author + ' (' + author.count + ')');
-  row('Libri in libreria', String(books.length));
+  row('Last 7 days', s.wPages + ' pages · ' + fmtMinutes(s.wSeconds));
+  row('Total read', totals.totalPages + ' pages · ' + fmtMinutes(totals.totalSeconds));
+  if (speed > 0) row('Average speed', Math.round(speed) + ' pages/hour');
+  if (author) row('Most-read author', author.author + ' (' + author.count + ')');
+  row('Books in library', String(books.length));
   body.appendChild(rows);
 
   $('#stats-modal').hidden = false;
@@ -881,7 +881,8 @@ async function openReader(id) {
   await DB.put(book);
 
   state.reader.sessionStart = Date.now();
-  lastStatsPage = state.reader.currentPage;
+  state.reader.committedPage = state.reader.currentPage;
+  state.reader.countedPages = new Set();
   applyReadingFilter();
 
   await renderReader();
@@ -889,8 +890,15 @@ async function openReader(id) {
   buildSearchIndex(); // background, not awaited
 }
 
-function closeReader() {
+async function closeReader() {
   flushReadingTime();
+  clearTimeout(dwellTimer);
+  // save the last settled reading position (don't let a pending dwell drop it)
+  const closing = state.reader.book;
+  if (closing) {
+    closing.lastPage = state.reader.committedPage || state.reader.currentPage || 1;
+    try { await DB.put(closing); } catch (e) { /* best effort */ }
+  }
   if (state.reader.io) state.reader.io.disconnect();
   state.reader.book = null;
   state.reader.pdfDoc = null;
@@ -925,27 +933,40 @@ $('#zoom-out').addEventListener('click', () => { state.reader.scale = Math.max(0
 function updateProgressUI() {
   const { currentPage, book } = state.reader;
   const total = book.numPages || 1;
-  $('#reader-progress').textContent = `Pagina ${currentPage} di ${total}`;
+  $('#reader-progress').textContent = `Page ${currentPage} of ${total}`;
   $('#page-progress-fill').style.width = Math.round((currentPage / total) * 100) + '%';
   const isBookmarked = (book.bookmarks || []).some((b) => b.page === currentPage);
   $('#bookmark-icon').setAttribute('fill', isBookmarked ? 'currentColor' : 'none');
 }
 
-let lastStatsPage = null;
+/* A page is only counted as "read" — and only becomes the saved reading position —
+   after you actually DWELL on it for a moment. Quickly flipping forward or jumping
+   back to check something old no longer inflates your stats or moves your progress. */
+const READ_DWELL_MS = 2000;
+let dwellTimer = null;
 function notePageSeen(n) {
-  if (lastStatsPage !== null && n !== lastStatsPage) Stats.addPages(1);
-  lastStatsPage = n;
+  clearTimeout(dwellTimer);
+  dwellTimer = setTimeout(() => confirmPageRead(n), READ_DWELL_MS);
+}
+function confirmPageRead(n) {
+  const r = state.reader;
+  if (!r.book || r.currentPage !== n) return; // moved on before settling → ignore
+  r.committedPage = n;
+  if (!r.countedPages) r.countedPages = new Set();
+  if (!r.countedPages.has(n)) { r.countedPages.add(n); Stats.addPages(1); } // once per page per session
+  persistProgress();
 }
 
 function persistProgress() {
   clearTimeout(state.reader.saveTimer);
   state.reader.saveTimer = setTimeout(async () => {
-    const { book, currentPage } = state.reader;
+    const { book, committedPage, currentPage } = state.reader;
     if (!book) return;
-    book.lastPage = currentPage;
-    if (!book.finishedAt && book.numPages > 1 && currentPage >= book.numPages) {
+    const page = committedPage || currentPage;
+    book.lastPage = page;
+    if (!book.finishedAt && book.numPages > 1 && page >= book.numPages) {
       book.finishedAt = Date.now();
-      showToast('Libro terminato — complimenti!');
+      showToast('Book finished — congratulations!');
     }
     await DB.put(book);
   }, 350);
@@ -1148,9 +1169,8 @@ function updateCurrentPageFromScroll() {
   }
   if (page && page !== state.reader.currentPage) {
     state.reader.currentPage = page;
-    notePageSeen(page);
+    notePageSeen(page); // dwell-gated: persists + counts only if you settle here
     updateProgressUI();
-    persistProgress();
   }
 }
 (() => {
@@ -1193,7 +1213,6 @@ async function renderSinglePage(n) {
   await buildTextLayer(wrap, textContent, viewport);
 
   updateProgressUI();
-  persistProgress();
 }
 
 $('#prev-page').addEventListener('click', () => renderSinglePage(state.reader.currentPage - 1));
@@ -1408,20 +1427,24 @@ document.addEventListener('selectionchange', () => {
 
   const rect = range.getBoundingClientRect();
   const scrollRect = $('#pdf-scroll').getBoundingClientRect();
+  // the popover is absolutely positioned inside its offsetParent (#reader-view),
+  // so all coordinates must be expressed relative to that element — not to
+  // #pdf-scroll, which sits lower and used to leave the popover floating too high
+  const base = (popover.offsetParent || $('#reader-view')).getBoundingClientRect();
   popover.hidden = false;
-  // clamp horizontally so the popover never spills outside the reader
+  // horizontal: centered on the selection, clamped to the visible reader width
   const half = (popover.offsetWidth || 180) / 2;
-  let left = rect.left + rect.width / 2 - scrollRect.left;
-  left = Math.max(half + 6, Math.min(scrollRect.width - half - 6, left));
-  popover.style.left = left + 'px';
+  const centerX = rect.left + rect.width / 2;
+  const clampedX = Math.max(scrollRect.left + half + 6, Math.min(scrollRect.right - half - 6, centerX));
+  popover.style.left = (clampedX - base.left) + 'px';
   // flip below the selection when there isn't room above (so it never covers the text)
   const spaceAbove = rect.top - scrollRect.top;
   if (spaceAbove < 52) {
     popover.classList.add('selection-popover--below');
-    popover.style.top = (rect.bottom - scrollRect.top) + 'px';
+    popover.style.top = (rect.bottom - base.top) + 'px';
   } else {
     popover.classList.remove('selection-popover--below');
-    popover.style.top = spaceAbove + 'px';
+    popover.style.top = (rect.top - base.top) + 'px';
   }
   popover.dataset.text = text;
   const wrap = anchorNode.closest('.pdf-page-wrap');
@@ -1445,7 +1468,7 @@ $('#save-highlight-btn').addEventListener('click', async () => {
   window.getSelection().removeAllRanges();
   clearLiveSelection();
   refreshQuoteHighlights(page);
-  showToast('Citazione salvata ed evidenziata');
+  showToast('Quote saved and highlighted');
   if (!$('#side-panel').hidden) renderSidePanel();
 });
 
@@ -1459,7 +1482,7 @@ $('#bookmark-btn').addEventListener('click', async () => {
   else book.bookmarks.push({ id: uid(), page, addedAt: Date.now() });
   await DB.put(book);
   updateProgressUI();
-  showToast(idx >= 0 ? 'Segnalibro rimosso' : 'Segnalibro aggiunto');
+  showToast(idx >= 0 ? 'Bookmark removed' : 'Bookmark added');
   if (!$('#side-panel').hidden) renderSidePanel();
 });
 
@@ -1486,12 +1509,12 @@ function renderSidePanel() {
   qList.innerHTML = '';
 
   const bookmarks = (book.bookmarks || []).slice().sort((a, b) => a.page - b.page);
-  if (bookmarks.length === 0) bmList.appendChild(el('div', 'panel-empty', 'Nessun segnalibro ancora.'));
+  if (bookmarks.length === 0) bmList.appendChild(el('div', 'panel-empty', 'No bookmarks yet.'));
   bookmarks.forEach((b) => {
     const item = el('div', 'panel-item');
-    item.appendChild(el('div', 'panel-item__page', 'Pagina ' + b.page));
+    item.appendChild(el('div', 'panel-item__page', 'Page ' + b.page));
     item.onclick = () => goToPage(b.page);
-    const del = el('button', 'panel-item__delete', 'Rimuovi');
+    const del = el('button', 'panel-item__delete', 'Remove');
     del.onclick = async (ev) => {
       ev.stopPropagation();
       book.bookmarks = book.bookmarks.filter((x) => x.id !== b.id);
@@ -1505,17 +1528,17 @@ function renderSidePanel() {
 
   const quotes = (book.quotes || []).slice().sort((a, b) => a.page - b.page);
   if (quotes.length === 0) {
-    qList.appendChild(el('div', 'panel-empty', 'Nessuna citazione salvata ancora.'));
+    qList.appendChild(el('div', 'panel-empty', 'No quotes saved yet.'));
   } else {
     const bar = el('div', 'panel-toolbar');
-    const exportBtn = el('button', 'panel-toolbar__btn', '↧ Esporta citazioni');
+    const exportBtn = el('button', 'panel-toolbar__btn', '↧ Export quotes');
     exportBtn.onclick = () => exportQuotes(book);
     bar.appendChild(exportBtn);
     qList.appendChild(bar);
   }
   quotes.forEach((q) => {
     const item = el('div', 'panel-item');
-    item.appendChild(el('div', 'panel-item__page', 'Pagina ' + q.page));
+    item.appendChild(el('div', 'panel-item__page', 'Page ' + q.page));
     const textEl = el('div', 'panel-item__text', '"' + escapeHtml(q.text) + '"');
     textEl.onclick = () => goToPage(q.page);
     item.appendChild(textEl);
@@ -1527,7 +1550,7 @@ function renderSidePanel() {
     item.appendChild(noteEl);
 
     const actions = el('div', 'panel-item__actions');
-    const noteBtn = el('button', 'panel-item__link', q.note ? 'Modifica nota' : 'Aggiungi nota');
+    const noteBtn = el('button', 'panel-item__link', q.note ? 'Edit note' : 'Add note');
     noteBtn.onclick = (ev) => {
       ev.stopPropagation();
       // toggle an inline editor
@@ -1535,7 +1558,7 @@ function renderSidePanel() {
       if (existing) { existing.remove(); return; }
       const ta = el('textarea', 'note-editor');
       ta.value = q.note || '';
-      ta.placeholder = 'Scrivi una nota su questa citazione…';
+      ta.placeholder = 'Write a note about this quote…';
       const saveNote = async () => {
         q.note = ta.value.trim();
         await DB.put(book);
@@ -1548,7 +1571,7 @@ function renderSidePanel() {
     };
     actions.appendChild(noteBtn);
 
-    const del = el('button', 'panel-item__delete', 'Elimina');
+    const del = el('button', 'panel-item__delete', 'Delete');
     del.onclick = async (ev) => {
       ev.stopPropagation();
       book.quotes = book.quotes.filter((x) => x.id !== q.id);
@@ -1565,29 +1588,29 @@ function renderSidePanel() {
 /* ---- export a book's quotes + notes as a Markdown file ---- */
 function exportQuotes(book) {
   const quotes = (book.quotes || []).slice().sort((a, b) => a.page - b.page);
-  if (quotes.length === 0) { showToast('Nessuna citazione da esportare'); return; }
+  if (quotes.length === 0) { showToast('No quotes to export'); return; }
   const lines = [];
-  lines.push('# ' + (book.title || 'Senza titolo'));
+  lines.push('# ' + (book.title || 'Untitled'));
   if (book.author) lines.push('*' + book.author + '*');
   lines.push('');
-  lines.push('> ' + quotes.length + (quotes.length === 1 ? ' citazione' : ' citazioni') + ' — BookNest');
+  lines.push('> ' + quotes.length + (quotes.length === 1 ? ' quote' : ' quotes') + ' — BookNest');
   lines.push('');
   quotes.forEach((q) => {
-    lines.push('### Pagina ' + q.page);
+    lines.push('### Page ' + q.page);
     lines.push('> ' + q.text.replace(/\n+/g, ' ').trim());
-    if (q.note) { lines.push(''); lines.push('**Nota:** ' + q.note); }
+    if (q.note) { lines.push(''); lines.push('**Note:** ' + q.note); }
     lines.push('');
   });
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  const safe = (book.title || 'citazioni').replace(/[^\w\sÀ-ÿ-]/g, '').trim().slice(0, 60) || 'citazioni';
-  a.download = 'citazioni-' + safe + '.md';
+  const safe = (book.title || 'quotes').replace(/[^\w\sÀ-ÿ-]/g, '').trim().slice(0, 60) || 'quotes';
+  a.download = 'quotes-' + safe + '.md';
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-  showToast('Citazioni esportate');
+  showToast('Quotes exported');
 }
 
 function goToPage(n) {
@@ -1621,18 +1644,18 @@ async function renderOutline() {
     state.reader.outline = outline;
   }
   if (!outline || outline.length === 0) {
-    list.appendChild(el('div', 'panel-empty', 'Questo PDF non ha un indice.'));
+    list.appendChild(el('div', 'panel-empty', 'This PDF has no table of contents.'));
     return;
   }
   const addItems = (items, depth) => {
     items.forEach((it) => {
       const row = el('button', 'outline-item');
       row.style.paddingLeft = (10 + depth * 14) + 'px';
-      row.textContent = it.title || '(senza titolo)';
+      row.textContent = it.title || '(untitled)';
       row.onclick = async () => {
         const p = await outlineDestToPage(it.dest);
         if (p) goToPage(p);
-        else showToast('Destinazione non disponibile');
+        else showToast('Destination not available');
       };
       list.appendChild(row);
       if (it.items && it.items.length) addItems(it.items, depth + 1);
@@ -1707,7 +1730,7 @@ $('#reader-search-input').addEventListener('input', (e) => {
   searchMatchPos = searchMatches.length ? 0 : -1;
   $('#reader-search-count').textContent = searchMatches.length
     ? `${searchMatchPos + 1}/${searchMatches.length}`
-    : 'nessun risultato';
+    : 'no results';
   if (searchMatches.length) jumpToSearchMatch(q);
 });
 $('#reader-search-next').addEventListener('click', () => {
@@ -1815,10 +1838,10 @@ renderStatusBar = function () {
   const label = $('#lib-sort-label');
   if (!trigger) return;
 
-  const SORT_LABELS = { recent: 'Recenti', title: 'Titolo', author: 'Autore', progress: 'Progresso' };
+  const SORT_LABELS = { recent: 'Recent', title: 'Title', author: 'Author', progress: 'Progress' };
 
   function paint() {
-    label.textContent = SORT_LABELS[state.sortBy] || 'Recenti';
+    label.textContent = SORT_LABELS[state.sortBy] || 'Recent';
     panel.innerHTML = '';
     Object.entries(SORT_LABELS).forEach(([value, text]) => {
       const active = state.sortBy === value;
