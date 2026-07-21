@@ -1621,3 +1621,89 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
 }
+
+/* ============================================================
+   Tablet sidebar logic (variante 2a)
+   Non duplica nessuna logica: richiama gli handler già esistenti
+   (#menu-stats, #menu-export, #menu-import, #theme-toggle) e legge/scrive
+   lo stesso `state` usato dal resto dell'app.
+   ============================================================ */
+
+/* ---- shelves nella sidebar: stesso stato di renderStatusBar() ---- */
+function renderSidebarShelves() {
+  const host = $('#sidebar-shelves');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const key of ['all', 'toread', 'reading', 'read']) {
+    const count = key === 'all' ? state.books.length : state.books.filter((b) => bookStatus(b) === key).length;
+    if (key !== 'all' && count === 0 && state.activeStatus !== key) continue;
+    const item = el('button', 'chip' + (state.activeStatus === key ? ' chip--active' : ''));
+    item.type = 'button';
+    item.innerHTML = `<span>${STATUS_LABELS[key]}</span><span>${count}</span>`;
+    item.onclick = () => { state.activeStatus = key; renderStatusBar(); renderGrid(); };
+    host.appendChild(item);
+  }
+}
+
+// renderStatusBar() è già chiamata da loadLibrary() e dai click sulle chip
+// mobile: la "avvolgiamo" così la sidebar resta sempre sincronizzata, senza
+// toccare la funzione originale.
+const _renderStatusBar = renderStatusBar;
+renderStatusBar = function () {
+  _renderStatusBar();
+  renderSidebarShelves();
+};
+
+/* ---- pannello impostazioni: richiama i bottoni esistenti del menu mobile ---- */
+(function initSidebarSettings() {
+  const btn = $('#sidebar-settings-btn');
+  const panel = $('#sidebar-settings-panel');
+  if (!btn || !panel) return;
+
+  btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
+  $('#sidebar-menu-stats').addEventListener('click', () => { panel.hidden = true; $('#menu-stats').click(); });
+  $('#sidebar-menu-export').addEventListener('click', () => { panel.hidden = true; $('#menu-export').click(); });
+  $('#sidebar-menu-import').addEventListener('click', () => { panel.hidden = true; $('#menu-import').click(); });
+  $('#sidebar-theme-toggle').addEventListener('click', () => $('#theme-toggle').click());
+  $('#sidebar-stats-btn').addEventListener('click', () => $('#menu-stats').click());
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) panel.hidden = true;
+  }, true);
+})();
+
+/* ---- dropdown di ordinamento: pilota lo stesso state.sortBy / #sort-select ---- */
+(function initLibSort() {
+  const trigger = $('#lib-sort-trigger');
+  const panel = $('#lib-sort-panel');
+  const label = $('#lib-sort-label');
+  if (!trigger) return;
+
+  const SORT_LABELS = { recent: 'Recenti', title: 'Titolo', author: 'Autore', progress: 'Progresso' };
+
+  function paint() {
+    label.textContent = SORT_LABELS[state.sortBy] || 'Recenti';
+    panel.innerHTML = '';
+    Object.entries(SORT_LABELS).forEach(([value, text]) => {
+      const active = state.sortBy === value;
+      const opt = el('button', 'lib-sort__opt' + (active ? ' lib-sort__opt--active' : ''));
+      opt.type = 'button';
+      opt.innerHTML = `<span>${text}</span>` + (active ? '<span class="lib-sort__check">✓</span>' : '');
+      opt.onclick = () => {
+        state.sortBy = value;
+        $('#sort-select').value = value; // tiene sincronizzata la select nativa (mobile)
+        panel.hidden = true;
+        paint();
+        renderGrid();
+      };
+      panel.appendChild(opt);
+    });
+  }
+
+  trigger.addEventListener('click', () => { panel.hidden = !panel.hidden; if (!panel.hidden) paint(); });
+  document.addEventListener('pointerdown', (e) => {
+    if (!panel.hidden && !panel.contains(e.target) && !trigger.contains(e.target)) panel.hidden = true;
+  }, true);
+
+  paint();
+})();

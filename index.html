@@ -22,59 +22,116 @@
 
   <!-- LIBRARY VIEW -->
   <section id="library-view" class="view view--active">
-    <header class="topbar">
-      <div class="brand">
+
+    <nav class="lib-sidebar" id="lib-sidebar">
+      <div class="lib-sidebar__brand">
         <span class="brand__glow" aria-hidden="true"></span>
-        <h1 class="brand__title">BookNest</h1>
+        <h1 class="lib-sidebar__title">BookNest</h1>
       </div>
-      <div class="topbar-actions">
-        <button id="library-search-btn" class="icon-btn" title="Cerca in libreria" aria-label="Cerca in libreria">
-          <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.51 6.51 0 001.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 00-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.51 6.51 0 005.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        </button>
-        <button id="theme-toggle" class="icon-btn" title="Cambia tema" aria-label="Cambia tema">
-          <svg viewBox="0 0 24 24" width="19" height="19"><path id="theme-icon" fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.4 5.4 0 01-7.54-7.54A9.05 9.05 0 0012 3z"/></svg>
-        </button>
-        <button id="library-menu-btn" class="icon-btn" title="Menu" aria-label="Menu">
-          <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M12 8a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
-        </button>
-      </div>
-    </header>
 
-    <div id="library-search-bar" class="library-search-bar" hidden>
-      <input id="library-search-input" type="text" placeholder="Cerca per titolo o autore…" autocomplete="off">
-      <button id="library-search-close" class="icon-btn" aria-label="Chiudi ricerca">
-        <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      <button class="lib-nav-item lib-nav-item--active" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M4 4h7v7H4zm9 0h7v7h-7zm-9 9h7v7H4zm9 0h7v7h-7z"/></svg>
+        Libreria
       </button>
-    </div>
+      <button class="lib-nav-item" id="sidebar-stats-btn" type="button">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M4 14h4v6H4zm6-8h4v14h-4zm6 4h4v10h-4z"/></svg>
+        Statistiche
+      </button>
 
-    <div id="status-bar" class="status-bar" hidden>
-      <div id="status-chips" class="status-chips"></div>
-      <select id="sort-select" class="sort-select" aria-label="Ordina per">
-        <option value="recent">Recenti</option>
-        <option value="title">Titolo</option>
-        <option value="author">Autore</option>
-        <option value="progress">Progresso</option>
-      </select>
-    </div>
+      <div class="lib-sidebar__label">Scaffali</div>
+      <div id="sidebar-shelves" class="lib-sidebar__shelves"></div>
 
-    <div id="category-bar" class="category-bar" hidden></div>
+      <div class="lib-sidebar__footer">
+        <button class="icon-btn" id="sidebar-theme-toggle" type="button" aria-label="Cambia tema" title="Cambia tema">
+          <svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.4 5.4 0 01-7.54-7.54A9.05 9.05 0 0012 3z"/></svg>
+        </button>
+        <div class="lib-settings">
+          <button class="icon-btn" id="sidebar-settings-btn" type="button" aria-label="Impostazioni" title="Impostazioni">
+            <svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.44.17-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.07.63-.07.94s.02.63.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
+          <div class="lib-settings__panel" id="sidebar-settings-panel" hidden>
+            <div class="lib-settings__title">BookNest</div>
+            <button class="lib-settings__item" id="sidebar-menu-stats" type="button">
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 14h4v6H4zm6-8h4v14h-4zm6 4h4v10h-4z"/></svg>
+              Statistiche di lettura
+            </button>
+            <button class="lib-settings__item" id="sidebar-menu-export" type="button">
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M5 20h14v-2H5v2zM12 2 7 9h3v6h4V9h3z"/></svg>
+              Esporta libreria
+            </button>
+            <button class="lib-settings__item" id="sidebar-menu-import" type="button">
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M5 4h14v2H5zm7 3 5 7h-3v6h-4v-6H7z"/></svg>
+              Importa backup
+            </button>
+          </div>
+        </div>
+      </div>
+    </nav>
 
-    <main class="library-main">
-      <div id="empty-state" class="empty-state" hidden>
-        <div class="empty-state__lamp" aria-hidden="true"></div>
-        <h2>Lo scaffale è vuoto</h2>
-        <p>Aggiungi il tuo primo PDF: titolo e autore vengono riconosciuti in automatico, e resta tutto salvato sul dispositivo, anche senza connessione.</p>
-        <button class="btn btn--primary" id="empty-add-btn">Aggiungi un libro</button>
+    <div class="lib-main">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand__glow" aria-hidden="true"></span>
+          <h1 class="brand__title">BookNest</h1>
+        </div>
+        <div class="topbar-actions">
+          <button id="library-search-btn" class="icon-btn" title="Cerca in libreria" aria-label="Cerca in libreria">
+            <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.51 6.51 0 001.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 00-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.51 6.51 0 005.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          </button>
+          <button id="theme-toggle" class="icon-btn" title="Cambia tema" aria-label="Cambia tema">
+            <svg viewBox="0 0 24 24" width="19" height="19"><path id="theme-icon" fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.4 5.4 0 01-7.54-7.54A9.05 9.05 0 0012 3z"/></svg>
+          </button>
+          <button id="library-menu-btn" class="icon-btn" title="Menu" aria-label="Menu">
+            <svg viewBox="0 0 24 24" width="19" height="19"><path fill="currentColor" d="M12 8a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="lib-toolbar">
+        <div id="library-search-bar" class="library-search-bar" hidden>
+          <input id="library-search-input" type="text" placeholder="Cerca per titolo o autore…" autocomplete="off">
+          <button id="library-search-close" class="icon-btn" aria-label="Chiudi ricerca">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="lib-sort" id="lib-sort">
+          <button class="lib-sort__trigger" id="lib-sort-trigger" type="button">
+            <span id="lib-sort-label">Recenti</span>
+            <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+          </button>
+          <div class="lib-sort__panel" id="lib-sort-panel" hidden></div>
+        </div>
       </div>
 
-      <div id="no-results" class="empty-state" hidden>
-        <div class="empty-state__lamp" aria-hidden="true"></div>
-        <h2>Nessun libro trovato</h2>
-        <p>Prova un altro termine di ricerca o rimuovi il filtro per categoria.</p>
+      <div id="status-bar" class="status-bar" hidden>
+        <div id="status-chips" class="status-chips"></div>
+        <select id="sort-select" class="sort-select" aria-label="Ordina per">
+          <option value="recent">Recenti</option>
+          <option value="title">Titolo</option>
+          <option value="author">Autore</option>
+          <option value="progress">Progresso</option>
+        </select>
       </div>
 
-      <div id="book-grid" class="book-grid" hidden></div>
-    </main>
+      <div id="category-bar" class="category-bar" hidden></div>
+
+      <main class="library-main">
+        <div id="empty-state" class="empty-state" hidden>
+          <div class="empty-state__lamp" aria-hidden="true"></div>
+          <h2>Lo scaffale è vuoto</h2>
+          <p>Aggiungi il tuo primo PDF: titolo e autore vengono riconosciuti in automatico, e resta tutto salvato sul dispositivo, anche senza connessione.</p>
+          <button class="btn btn--primary" id="empty-add-btn">Aggiungi un libro</button>
+        </div>
+
+        <div id="no-results" class="empty-state" hidden>
+          <div class="empty-state__lamp" aria-hidden="true"></div>
+          <h2>Nessun libro trovato</h2>
+          <p>Prova un altro termine di ricerca o rimuovi il filtro per categoria.</p>
+        </div>
+
+        <div id="book-grid" class="book-grid" hidden></div>
+      </main>
+    </div>
 
     <input type="file" id="file-input" accept="application/pdf,.pdf" multiple hidden>
     <input type="file" id="import-input" accept="application/json,.json" hidden>
