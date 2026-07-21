@@ -719,9 +719,14 @@ button { font-family: inherit; }
 .stat-row__label { font-size: 13.5px; color: var(--text-dim); }
 .stat-row__value { font-family: var(--font-mono); font-size: 15px; color: var(--text); }
 
-/* stats modal: keep tall content scrollable */
+/* stats modal: keep tall content scrollable. Reserve the scrollbar gutter on
+   both sides so a classic (non-overlay) scrollbar — e.g. on Windows — can't
+   shift the content left or clip its right edge; everything stays centered. */
 #stats-modal .modal__card { max-height: 88vh; display: flex; flex-direction: column; }
-#stats-modal .stats-body { overflow-y: auto; flex: 1; margin: 0 -4px 12px; padding: 0 4px; }
+#stats-modal .stats-body {
+  overflow-y: auto; flex: 1; margin: 0 0 12px; padding: 0;
+  scrollbar-gutter: stable both-edges;
+}
 
 /* reading goal */
 .goal {
