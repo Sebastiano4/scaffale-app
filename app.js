@@ -214,6 +214,43 @@ const Stats = {
   },
 };
 
+/* ---- Reading goal (books or pages, per week or per year) ---- */
+const Goal = {
+  key: 'booknest-goal',
+  load() { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
+  save(g) { try { localStorage.setItem(this.key, JSON.stringify(g)); } catch (e) { /* full */ } },
+  clear() { localStorage.removeItem(this.key); },
+  // returns { done, target, label, pct } or null
+  progress(books) {
+    const g = this.load();
+    if (!g || !g.target) return null;
+    const now = new Date();
+    let done = 0, label = '';
+    if (g.type === 'books') {
+      if (g.period === 'year') {
+        const y = now.getFullYear();
+        done = books.filter((b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === y).length;
+        label = g.target + ' libri nel ' + y;
+      } else {
+        const weekAgo = Date.now() - 7 * 864e5;
+        done = books.filter((b) => b.finishedAt && b.finishedAt >= weekAgo).length;
+        label = g.target + ' libri a settimana';
+      }
+    } else { // pages
+      const s = Stats.load();
+      if (g.period === 'year') {
+        const y = String(now.getFullYear());
+        done = Object.entries(s.days).reduce((sum, [k, v]) => k.startsWith(y) ? sum + (v.pages || 0) : sum, 0);
+        label = g.target + ' pagine nel ' + now.getFullYear();
+      } else {
+        done = Stats.summary().wPages;
+        label = g.target + ' pagine a settimana';
+      }
+    }
+    return { done, target: g.target, label, pct: Math.min(100, Math.round((done / g.target) * 100)) };
+  },
+};
+
 function flushReadingTime() {
   if (state.reader.sessionStart) {
     Stats.addSeconds(Math.round((Date.now() - state.reader.sessionStart) / 1000));
@@ -367,6 +404,9 @@ function renderGrid() {
     const meta = el('div', 'book-meta');
     meta.appendChild(el('p', 'book-title', escapeHtml(book.title)));
     meta.appendChild(el('p', 'book-author', escapeHtml(book.author || 'Autore sconosciuto')));
+    if (book.rating > 0) {
+      meta.appendChild(el('p', 'book-stars', '★'.repeat(book.rating) + '<span class="book-stars__off">' + '★'.repeat(5 - book.rating) + '</span>'));
+    }
     meta.onclick = () => openMetadataModal({ mode: 'edit', book });
 
     card.appendChild(cover);
@@ -440,13 +480,38 @@ async function addBookFromFile(file) {
 /* ---- metadata modal (used for add-fallback edits and later edits) ---- */
 let modalCtx = null; // { mode: 'edit', book }
 
+function fmtDate(ts) {
+  if (!ts) return '—';
+  try { return new Date(ts).toLocaleDateString('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch (e) { return '—'; }
+}
+
+function paintStars(rating) {
+  document.querySelectorAll('#meta-rating .star').forEach((s) => {
+    s.classList.toggle('star--on', Number(s.dataset.v) <= rating);
+  });
+}
+
 function openMetadataModal({ mode, book }) {
-  modalCtx = { mode, book };
+  modalCtx = { mode, book, rating: book.rating || 0 };
   $('#metadata-modal-title').textContent = mode === 'edit' ? 'Modifica libro' : 'Conferma i dati del libro';
   $('#meta-title').value = book.title || '';
   $('#meta-author').value = book.author || '';
   $('#meta-category').value = book.category || '';
   $('#meta-status').value = book.status || 'auto';
+  $('#meta-review').value = book.review || '';
+  paintStars(modalCtx.rating);
+
+  const dates = $('#meta-dates');
+  if (mode === 'edit' && (book.startedAt || book.finishedAt || book.addedAt)) {
+    dates.hidden = false;
+    dates.innerHTML =
+      '<span>Aggiunto: ' + fmtDate(book.addedAt) + '</span>' +
+      (book.startedAt ? '<span>Iniziato: ' + fmtDate(book.startedAt) + '</span>' : '') +
+      (book.finishedAt ? '<span>Finito: ' + fmtDate(book.finishedAt) + '</span>' : '');
+  } else {
+    dates.hidden = true;
+  }
   $('#metadata-modal').hidden = false;
 
   let delBtn = document.getElementById('meta-delete');
@@ -473,17 +538,37 @@ function openMetadataModal({ mode, book }) {
 
 $('#meta-cancel').addEventListener('click', () => { $('#metadata-modal').hidden = true; });
 
+// star rating interaction
+document.querySelectorAll('#meta-rating .star').forEach((star) => {
+  star.addEventListener('click', () => {
+    if (!modalCtx) return;
+    modalCtx.rating = Number(star.dataset.v);
+    paintStars(modalCtx.rating);
+  });
+});
+$('#meta-rating-clear').addEventListener('click', () => {
+  if (!modalCtx) return;
+  modalCtx.rating = 0;
+  paintStars(0);
+});
+
 $('#meta-save').addEventListener('click', async () => {
   if (!modalCtx) return;
   const book = modalCtx.book;
   book.title = $('#meta-title').value.trim() || 'Senza titolo';
   book.author = $('#meta-author').value.trim();
   book.category = $('#meta-category').value.trim();
+  book.review = $('#meta-review').value.trim();
+  if (modalCtx.rating > 0) book.rating = modalCtx.rating; else delete book.rating;
   const st = $('#meta-status').value;
   if (st === 'auto') delete book.status;
   else {
     book.status = st;
-    if (st === 'read' && !book.finishedAt) book.finishedAt = Date.now();
+    if (st === 'reading' && !book.startedAt) book.startedAt = Date.now();
+    if (st === 'read') {
+      if (!book.startedAt) book.startedAt = book.addedAt || Date.now();
+      if (!book.finishedAt) book.finishedAt = Date.now();
+    }
     if (st !== 'read') delete book.finishedAt;
   }
   await DB.put(book);
@@ -586,25 +671,183 @@ function fmtMinutes(seconds) {
   return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
 }
 
-$('#menu-stats').addEventListener('click', () => {
-  $('#library-menu').hidden = true;
+function statTotals() {
+  const s = Stats.load();
+  let totalPages = 0, totalSeconds = 0;
+  for (const d of Object.values(s.days)) { totalPages += d.pages || 0; totalSeconds += d.seconds || 0; }
+  return { totalPages, totalSeconds };
+}
+
+function mostReadAuthor(books) {
+  const counts = {};
+  books.filter((b) => bookStatus(b) === 'read' && b.author).forEach((b) => {
+    counts[b.author] = (counts[b.author] || 0) + 1;
+  });
+  let best = null, n = 0;
+  for (const [a, c] of Object.entries(counts)) if (c > n) { best = a; n = c; }
+  return best ? { author: best, count: n } : null;
+}
+
+function dayKeyOf(date) {
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
+function renderHistoryChart(container) {
+  const s = Stats.load();
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const k = Stats.dayKey(i);
+    days.push({ k, pages: (s.days[k] && s.days[k].pages) || 0 });
+  }
+  const max = Math.max(1, ...days.map((d) => d.pages));
+  const chart = el('div', 'chart');
+  days.forEach((d) => {
+    const col = el('div', 'chart__col');
+    const bar = el('div', 'chart__bar' + (d.pages === 0 ? ' chart__bar--empty' : ''));
+    bar.style.height = Math.max(d.pages === 0 ? 3 : 6, Math.round((d.pages / max) * 100)) + '%';
+    bar.title = d.k + ': ' + d.pages + ' pagine';
+    col.appendChild(bar);
+    chart.appendChild(col);
+  });
+  container.appendChild(chart);
+  container.appendChild(el('div', 'chart__caption', 'Pagine lette · ultimi 14 giorni'));
+}
+
+function renderHeatmap(container) {
+  const s = Stats.load();
+  const weeks = 13;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dow = (today.getDay() + 6) % 7; // Monday = 0
+  const start = new Date(today);
+  start.setDate(start.getDate() - (dow + (weeks - 1) * 7));
+  const max = Math.max(1, ...Object.values(s.days).map((d) => d.pages || 0));
+  const grid = el('div', 'heatmap');
+  let col = null;
+  for (let i = 0; i < weeks * 7; i++) {
+    if (i % 7 === 0) { col = el('div', 'heatmap__col'); grid.appendChild(col); }
+    const dt = new Date(start); dt.setDate(dt.getDate() + i);
+    const cell = el('div', 'heatmap__cell');
+    if (dt > today) { cell.dataset.level = 'future'; col.appendChild(cell); continue; }
+    const key = dayKeyOf(dt);
+    const pages = (s.days[key] && s.days[key].pages) || 0;
+    cell.dataset.level = pages === 0 ? 0 : Math.min(4, Math.ceil((pages / max) * 4));
+    cell.title = key + ': ' + pages + ' pagine';
+    col.appendChild(cell);
+  }
+  container.appendChild(grid);
+  container.appendChild(el('div', 'chart__caption', 'Costanza · ultime 13 settimane'));
+}
+
+function openGoalEditor(rerender) {
+  const g = Goal.load() || { type: 'books', period: 'year', target: 12 };
+  const host = $('#goal-editor');
+  host.innerHTML = '';
+  host.hidden = false;
+  const mk = (id, label, opts, val) => {
+    const wrap = el('label', 'goal-field');
+    wrap.appendChild(el('span', null, label));
+    const sel = el('select'); sel.id = id;
+    opts.forEach(([v, t]) => { const o = el('option', null, t); o.value = v; if (v === val) o.selected = true; sel.appendChild(o); });
+    wrap.appendChild(sel);
+    return wrap;
+  };
+  host.appendChild(mk('goal-type', 'Conta', [['books', 'Libri'], ['pages', 'Pagine']], g.type));
+  host.appendChild(mk('goal-period', 'Periodo', [['week', 'a settimana'], ['year', "quest'anno"]], g.period));
+  const numWrap = el('label', 'goal-field');
+  numWrap.appendChild(el('span', null, 'Obiettivo'));
+  const num = el('input'); num.id = 'goal-target'; num.type = 'number'; num.min = '1'; num.value = g.target;
+  numWrap.appendChild(num);
+  host.appendChild(numWrap);
+  const actions = el('div', 'goal-editor__actions');
+  const save = el('button', 'btn btn--primary btn--sm', 'Salva obiettivo');
+  save.onclick = () => {
+    const t = parseInt($('#goal-target').value, 10);
+    if (isNaN(t) || t < 1) { showToast('Inserisci un numero valido'); return; }
+    Goal.save({ type: $('#goal-type').value, period: $('#goal-period').value, target: t });
+    host.hidden = true;
+    rerender();
+  };
+  const remove = el('button', 'btn btn--ghost btn--sm', 'Rimuovi');
+  remove.onclick = () => { Goal.clear(); host.hidden = true; rerender(); };
+  actions.appendChild(save); actions.appendChild(remove);
+  host.appendChild(actions);
+}
+
+function renderStats() {
+  const books = state.books;
   const s = Stats.summary();
-  const finished = state.books.filter((b) => bookStatus(b) === 'read').length;
-  const inProgress = state.books.filter((b) => bookStatus(b) === 'reading').length;
+  const totals = statTotals();
+  const finished = books.filter((b) => bookStatus(b) === 'read').length;
+  const inProgress = books.filter((b) => bookStatus(b) === 'reading').length;
+  const speed = totals.totalSeconds > 0 ? (totals.totalPages / (totals.totalSeconds / 3600)) : 0;
+  const author = mostReadAuthor(books);
+
   const body = $('#stats-body');
   body.innerHTML = '';
+
+  // --- reading goal ---
+  const prog = Goal.progress(books);
+  const goalBox = el('div', 'goal');
+  if (prog) {
+    goalBox.appendChild(el('div', 'goal__label', '🎯 ' + prog.label));
+    const barWrap = el('div', 'goal__bar');
+    const fill = el('div', 'goal__fill'); fill.style.width = prog.pct + '%';
+    barWrap.appendChild(fill);
+    goalBox.appendChild(barWrap);
+    goalBox.appendChild(el('div', 'goal__meta', prog.done + ' / ' + prog.target + (prog.pct >= 100 ? ' · raggiunto! 🎉' : ' · ' + prog.pct + '%')));
+    const edit = el('button', 'goal__edit', 'Modifica obiettivo');
+    edit.onclick = () => openGoalEditor(renderStats);
+    goalBox.appendChild(edit);
+  } else {
+    const setBtn = el('button', 'goal__edit', '＋ Imposta un obiettivo di lettura');
+    setBtn.onclick = () => openGoalEditor(renderStats);
+    goalBox.appendChild(setBtn);
+  }
+  body.appendChild(goalBox);
+  const editorHost = el('div', 'goal-editor'); editorHost.id = 'goal-editor'; editorHost.hidden = true;
+  body.appendChild(editorHost);
+
+  // --- summary tiles ---
+  const tiles = el('div', 'stat-tiles');
+  const tile = (big, small) => {
+    const t = el('div', 'stat-tile');
+    t.appendChild(el('div', 'stat-tile__big', big));
+    t.appendChild(el('div', 'stat-tile__small', small));
+    tiles.appendChild(t);
+  };
+  tile(String(s.today.pages), 'pagine oggi');
+  tile(String(s.streak), s.streak === 1 ? 'giorno di fila' : 'giorni di fila');
+  tile(String(finished), finished === 1 ? 'libro finito' : 'libri finiti');
+  tile(String(inProgress), 'in lettura');
+  body.appendChild(tiles);
+
+  // --- history chart + heatmap ---
+  const charts = el('div', 'stat-charts');
+  renderHistoryChart(charts);
+  renderHeatmap(charts);
+  body.appendChild(charts);
+
+  // --- detail rows ---
+  const rows = el('div', 'stat-rows');
   const row = (label, value) => {
     const r = el('div', 'stat-row');
     r.appendChild(el('span', 'stat-row__label', label));
     r.appendChild(el('span', 'stat-row__value', value));
-    body.appendChild(r);
+    rows.appendChild(r);
   };
-  row('Oggi', s.today.pages + ' pagine · ' + fmtMinutes(s.today.seconds));
   row('Ultimi 7 giorni', s.wPages + ' pagine · ' + fmtMinutes(s.wSeconds));
-  row('Giorni di fila con lettura', String(s.streak));
-  row('Libri in lettura', String(inProgress));
-  row('Libri finiti', String(finished));
+  row('Totale letto', totals.totalPages + ' pagine · ' + fmtMinutes(totals.totalSeconds));
+  if (speed > 0) row('Velocità media', Math.round(speed) + ' pagine/ora');
+  if (author) row('Autore più letto', author.author + ' (' + author.count + ')');
+  row('Libri in libreria', String(books.length));
+  body.appendChild(rows);
+
   $('#stats-modal').hidden = false;
+}
+
+$('#menu-stats').addEventListener('click', () => {
+  $('#library-menu').hidden = true;
+  renderStats();
 });
 
 /* ======================================================================
@@ -620,6 +863,7 @@ async function openReader(id) {
   state.reader.mode = book.readingMode || 'continuous';
   state.reader.currentPage = book.lastPage || 1;
   state.reader.textIndex = new Map();
+  state.reader.outline = undefined;
 
   $('#library-view').classList.remove('view--active');
   $('#reader-view').classList.add('view--active');
@@ -633,6 +877,7 @@ async function openReader(id) {
   book.numPages = pdfDoc.numPages;
 
   book.lastOpenedAt = Date.now();
+  if (!book.startedAt) book.startedAt = Date.now();
   await DB.put(book);
 
   state.reader.sessionStart = Date.now();
@@ -654,6 +899,8 @@ function closeReader() {
   $('#library-view').classList.add('view--active');
   $('#side-panel').hidden = true;
   $('#reader-search-bar').hidden = true;
+  $('#goto-popover').hidden = true;
+  $('#appearance-popover').hidden = true;
   loadLibrary();
 }
 
@@ -704,21 +951,42 @@ function persistProgress() {
   }, 350);
 }
 
-/* ---- reading filter: normal / sepia / night ---- */
-const READ_FILTERS = ['none', 'sepia', 'night'];
+/* ---- reading appearance: filter (normal/sepia/night) + brightness ---- */
 function applyReadingFilter() {
   const mode = localStorage.getItem('booknest-readfilter') || 'none';
+  const brightness = Number(localStorage.getItem('booknest-brightness') || 100);
   const scroll = $('#pdf-scroll');
   scroll.classList.toggle('filter-sepia', mode === 'sepia');
   scroll.classList.toggle('filter-night', mode === 'night');
+  scroll.style.setProperty('--read-brightness', (brightness / 100).toFixed(2));
+  // reflect current state in the appearance popover
+  document.querySelectorAll('#appearance-filters .appearance-chip').forEach((c) =>
+    c.classList.toggle('appearance-chip--active', c.dataset.filter === mode));
+  const slider = $('#brightness-slider');
+  if (slider) slider.value = brightness;
 }
 $('#filter-toggle').addEventListener('click', () => {
-  const cur = localStorage.getItem('booknest-readfilter') || 'none';
-  const next = READ_FILTERS[(READ_FILTERS.indexOf(cur) + 1) % READ_FILTERS.length];
-  localStorage.setItem('booknest-readfilter', next);
-  applyReadingFilter();
-  showToast(next === 'none' ? 'Filtro: normale' : next === 'sepia' ? 'Filtro: seppia' : 'Filtro: notte');
+  const pop = $('#appearance-popover');
+  pop.hidden = !pop.hidden;
+  if (!pop.hidden) applyReadingFilter();
 });
+document.querySelectorAll('#appearance-filters .appearance-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    localStorage.setItem('booknest-readfilter', chip.dataset.filter);
+    applyReadingFilter();
+  });
+});
+$('#brightness-slider').addEventListener('input', (e) => {
+  localStorage.setItem('booknest-brightness', e.target.value);
+  applyReadingFilter();
+});
+// close the goto / appearance popovers when tapping elsewhere
+document.addEventListener('pointerdown', (e) => {
+  const goto = $('#goto-popover');
+  if (!goto.hidden && !goto.contains(e.target) && e.target !== $('#reader-progress')) goto.hidden = true;
+  const appear = $('#appearance-popover');
+  if (!appear.hidden && !appear.contains(e.target) && !$('#filter-toggle').contains(e.target)) appear.hidden = true;
+}, true);
 
 /* ---- tap/click on the progress bar to jump anywhere in the book ---- */
 $('#page-progress-bar').addEventListener('click', (e) => {
@@ -924,22 +1192,67 @@ async function buildTextLayer(wrap, textContent, viewport) {
   } catch (e) { /* selection/search just won't work on this page if it fails */ }
 }
 
-/* ---- permanent highlights for saved quotes ---- */
+/* ---- permanent highlights for saved quotes ----
+   New quotes store normalized rectangles (0..1 relative to the page) captured
+   from the actual selection geometry, so the highlight covers exactly the
+   selected text and survives zoom. Legacy quotes (text only) fall back to a
+   conservative, length-capped span match so they can never blanket the page. */
 function applyQuoteHighlights(wrap) {
   const book = state.reader.book;
   if (!book) return;
   const n = Number(wrap.dataset.page);
+  wrap.querySelectorAll('.quote-highlight-layer').forEach((l) => l.remove());
   wrap.querySelectorAll('.quote-highlight').forEach((s) => s.classList.remove('quote-highlight'));
   const quotes = (book.quotes || []).filter((q) => q.page === n);
   if (quotes.length === 0) return;
-  const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-  const qtexts = quotes.map((q) => norm(q.text)).filter((t) => t.length >= 3);
-  if (qtexts.length === 0) return;
-  wrap.querySelectorAll('.textLayer span').forEach((span) => {
-    const t = norm(span.textContent);
-    if (t.length < 3) return;
-    if (qtexts.some((q) => q.includes(t) || t.includes(q))) span.classList.add('quote-highlight');
-  });
+
+  const withRects = quotes.filter((q) => Array.isArray(q.rects) && q.rects.length);
+  const legacy = quotes.filter((q) => !(Array.isArray(q.rects) && q.rects.length));
+
+  if (withRects.length) {
+    const layer = el('div', 'quote-highlight-layer');
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    withRects.forEach((q) => q.rects.forEach((r) => {
+      const box = el('div', 'quote-highlight-box');
+      box.style.left = (r.x * W) + 'px';
+      box.style.top = (r.y * H) + 'px';
+      box.style.width = (r.w * W) + 'px';
+      box.style.height = (r.h * H) + 'px';
+      layer.appendChild(box);
+    }));
+    wrap.insertBefore(layer, wrap.querySelector('.textLayer'));
+  }
+
+  if (legacy.length) {
+    const norm = (s) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+    // cap at ~160 chars (~2 lines) so an old long quote can't cover the page
+    const qtexts = legacy.map((q) => norm(q.text)).filter((t) => t.length >= 3 && t.length <= 160);
+    if (qtexts.length) {
+      wrap.querySelectorAll('.textLayer span').forEach((span) => {
+        const t = norm(span.textContent);
+        if (t.length < 3) return;
+        if (qtexts.some((q) => q.includes(t))) span.classList.add('quote-highlight');
+      });
+    }
+  }
+}
+
+/* Capture selection rectangles as fractions of the page wrap (0..1). */
+function captureQuoteRects(range, wrap) {
+  if (!range || !wrap) return [];
+  const wr = wrap.getBoundingClientRect();
+  if (!wr.width || !wr.height) return [];
+  const out = [];
+  for (const r of range.getClientRects()) {
+    if (r.width < 1 || r.height < 1) continue;
+    out.push({
+      x: (r.left - wr.left) / wr.width,
+      y: (r.top - wr.top) / wr.height,
+      w: r.width / wr.width,
+      h: r.height / wr.height,
+    });
+  }
+  return out;
 }
 function refreshQuoteHighlights(page) {
   const wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
@@ -959,12 +1272,26 @@ document.addEventListener('selectionchange', () => {
 
   const rect = range.getBoundingClientRect();
   const scrollRect = $('#pdf-scroll').getBoundingClientRect();
-  popover.style.left = (rect.left + rect.width / 2 - scrollRect.left) + 'px';
-  popover.style.top = (rect.top - scrollRect.top) + 'px';
   popover.hidden = false;
+  // clamp horizontally so the popover never spills outside the reader
+  const half = (popover.offsetWidth || 180) / 2;
+  let left = rect.left + rect.width / 2 - scrollRect.left;
+  left = Math.max(half + 6, Math.min(scrollRect.width - half - 6, left));
+  popover.style.left = left + 'px';
+  // flip below the selection when there isn't room above (so it never covers the text)
+  const spaceAbove = rect.top - scrollRect.top;
+  if (spaceAbove < 52) {
+    popover.classList.add('selection-popover--below');
+    popover.style.top = (rect.bottom - scrollRect.top) + 'px';
+  } else {
+    popover.classList.remove('selection-popover--below');
+    popover.style.top = spaceAbove + 'px';
+  }
   popover.dataset.text = text;
   const wrap = anchorNode.closest('.pdf-page-wrap');
   popover.dataset.page = wrap ? wrap.dataset.page : state.reader.currentPage;
+  // stash normalized selection rectangles for a precise, zoom-stable highlight
+  popover._rects = wrap ? captureQuoteRects(range, wrap) : [];
 });
 
 $('#save-highlight-btn').addEventListener('click', async () => {
@@ -974,8 +1301,10 @@ $('#save-highlight-btn').addEventListener('click', async () => {
   if (!text) return;
   const book = state.reader.book;
   book.quotes = book.quotes || [];
-  book.quotes.push({ id: uid(), page, text, addedAt: Date.now() });
+  const rects = Array.isArray(popover._rects) ? popover._rects : [];
+  book.quotes.push({ id: uid(), page, text, rects, note: '', addedAt: Date.now() });
   await DB.put(book);
+  popover._rects = [];
   popover.hidden = true;
   window.getSelection().removeAllRanges();
   refreshQuoteHighlights(page);
@@ -1007,6 +1336,8 @@ document.querySelectorAll('.side-panel__tab').forEach((tab) => {
     const which = tab.dataset.tab;
     $('#bookmarks-list').hidden = which !== 'bookmarks';
     $('#quotes-list').hidden = which !== 'quotes';
+    $('#outline-list').hidden = which !== 'outline';
+    if (which === 'outline') renderOutline();
   });
 });
 
@@ -1036,12 +1367,50 @@ function renderSidePanel() {
   });
 
   const quotes = (book.quotes || []).slice().sort((a, b) => a.page - b.page);
-  if (quotes.length === 0) qList.appendChild(el('div', 'panel-empty', 'Nessuna citazione salvata ancora.'));
+  if (quotes.length === 0) {
+    qList.appendChild(el('div', 'panel-empty', 'Nessuna citazione salvata ancora.'));
+  } else {
+    const bar = el('div', 'panel-toolbar');
+    const exportBtn = el('button', 'panel-toolbar__btn', '↧ Esporta citazioni');
+    exportBtn.onclick = () => exportQuotes(book);
+    bar.appendChild(exportBtn);
+    qList.appendChild(bar);
+  }
   quotes.forEach((q) => {
     const item = el('div', 'panel-item');
     item.appendChild(el('div', 'panel-item__page', 'Pagina ' + q.page));
-    item.appendChild(el('div', 'panel-item__text', '"' + escapeHtml(q.text) + '"'));
-    item.onclick = () => goToPage(q.page);
+    const textEl = el('div', 'panel-item__text', '"' + escapeHtml(q.text) + '"');
+    textEl.onclick = () => goToPage(q.page);
+    item.appendChild(textEl);
+
+    // note (shown if present)
+    const noteEl = el('div', 'panel-item__note');
+    noteEl.hidden = !q.note;
+    if (q.note) noteEl.textContent = q.note;
+    item.appendChild(noteEl);
+
+    const actions = el('div', 'panel-item__actions');
+    const noteBtn = el('button', 'panel-item__link', q.note ? 'Modifica nota' : 'Aggiungi nota');
+    noteBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      // toggle an inline editor
+      const existing = item.querySelector('.note-editor');
+      if (existing) { existing.remove(); return; }
+      const ta = el('textarea', 'note-editor');
+      ta.value = q.note || '';
+      ta.placeholder = 'Scrivi una nota su questa citazione…';
+      const saveNote = async () => {
+        q.note = ta.value.trim();
+        await DB.put(book);
+        renderSidePanel();
+      };
+      ta.addEventListener('blur', saveNote);
+      ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); ta.blur(); } });
+      item.appendChild(ta);
+      ta.focus();
+    };
+    actions.appendChild(noteBtn);
+
     const del = el('button', 'panel-item__delete', 'Elimina');
     del.onclick = async (ev) => {
       ev.stopPropagation();
@@ -1050,9 +1419,38 @@ function renderSidePanel() {
       refreshQuoteHighlights(q.page);
       renderSidePanel();
     };
-    item.appendChild(del);
+    actions.appendChild(del);
+    item.appendChild(actions);
     qList.appendChild(item);
   });
+}
+
+/* ---- export a book's quotes + notes as a Markdown file ---- */
+function exportQuotes(book) {
+  const quotes = (book.quotes || []).slice().sort((a, b) => a.page - b.page);
+  if (quotes.length === 0) { showToast('Nessuna citazione da esportare'); return; }
+  const lines = [];
+  lines.push('# ' + (book.title || 'Senza titolo'));
+  if (book.author) lines.push('*' + book.author + '*');
+  lines.push('');
+  lines.push('> ' + quotes.length + (quotes.length === 1 ? ' citazione' : ' citazioni') + ' — BookNest');
+  lines.push('');
+  quotes.forEach((q) => {
+    lines.push('### Pagina ' + q.page);
+    lines.push('> ' + q.text.replace(/\n+/g, ' ').trim());
+    if (q.note) { lines.push(''); lines.push('**Nota:** ' + q.note); }
+    lines.push('');
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  const safe = (book.title || 'citazioni').replace(/[^\w\sÀ-ÿ-]/g, '').trim().slice(0, 60) || 'citazioni';
+  a.download = 'citazioni-' + safe + '.md';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  showToast('Citazioni esportate');
 }
 
 function goToPage(n) {
@@ -1061,6 +1459,77 @@ function goToPage(n) {
   const wrap = document.querySelector(`.pdf-page-wrap[data-page="${n}"]`);
   if (wrap) $('#pdf-scroll').scrollTo({ top: Math.max(0, wrap.offsetTop - 8), behavior: 'smooth' });
 }
+
+/* ---- PDF outline / table of contents ---- */
+async function outlineDestToPage(dest) {
+  const pdfDoc = state.reader.pdfDoc;
+  if (!pdfDoc || dest == null) return null;
+  try {
+    let explicit = dest;
+    if (typeof dest === 'string') explicit = await pdfDoc.getDestination(dest);
+    if (!Array.isArray(explicit) || !explicit[0]) return null;
+    const idx = await pdfDoc.getPageIndex(explicit[0]);
+    return idx + 1;
+  } catch (e) { return null; }
+}
+
+async function renderOutline() {
+  const list = $('#outline-list');
+  const pdfDoc = state.reader.pdfDoc;
+  list.innerHTML = '';
+  if (!pdfDoc) return;
+  let outline = state.reader.outline;
+  if (outline === undefined) {
+    try { outline = await pdfDoc.getOutline(); } catch (e) { outline = null; }
+    state.reader.outline = outline;
+  }
+  if (!outline || outline.length === 0) {
+    list.appendChild(el('div', 'panel-empty', 'Questo PDF non ha un indice.'));
+    return;
+  }
+  const addItems = (items, depth) => {
+    items.forEach((it) => {
+      const row = el('button', 'outline-item');
+      row.style.paddingLeft = (10 + depth * 14) + 'px';
+      row.textContent = it.title || '(senza titolo)';
+      row.onclick = async () => {
+        const p = await outlineDestToPage(it.dest);
+        if (p) goToPage(p);
+        else showToast('Destinazione non disponibile');
+      };
+      list.appendChild(row);
+      if (it.items && it.items.length) addItems(it.items, depth + 1);
+    });
+  };
+  addItems(outline, 0);
+}
+
+/* ---- quick "go to page" popover ---- */
+function toggleGotoPopover() {
+  const pop = $('#goto-popover');
+  const book = state.reader.book;
+  if (!book || !book.numPages) return;
+  if (!pop.hidden) { pop.hidden = true; return; }
+  const input = $('#goto-input');
+  input.max = book.numPages;
+  input.value = state.reader.currentPage;
+  pop.hidden = false;
+  input.focus();
+  input.select();
+}
+function commitGotoPage() {
+  const book = state.reader.book;
+  if (!book) return;
+  const n = parseInt($('#goto-input').value, 10);
+  $('#goto-popover').hidden = true;
+  if (!isNaN(n)) goToPage(Math.min(book.numPages, Math.max(1, n)));
+}
+$('#reader-progress').addEventListener('click', toggleGotoPopover);
+$('#goto-go').addEventListener('click', commitGotoPage);
+$('#goto-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); commitGotoPage(); }
+  else if (e.key === 'Escape') $('#goto-popover').hidden = true;
+});
 
 /* ---- search within the book ---- */
 async function buildSearchIndex() {

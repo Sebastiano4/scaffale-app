@@ -127,6 +127,25 @@
 
     <div id="page-progress-bar" class="page-progress-bar"><div id="page-progress-fill" class="page-progress-fill"></div></div>
 
+    <!-- Go to page -->
+    <div id="goto-popover" class="goto-popover" hidden>
+      <input id="goto-input" type="number" min="1" inputmode="numeric" placeholder="Pagina…" aria-label="Vai a pagina">
+      <button id="goto-go" class="btn btn--primary btn--sm">Vai</button>
+    </div>
+
+    <!-- Reading appearance (filter + brightness) -->
+    <div id="appearance-popover" class="appearance-popover" hidden>
+      <div class="appearance-popover__row" id="appearance-filters">
+        <button data-filter="none" class="appearance-chip">Normale</button>
+        <button data-filter="sepia" class="appearance-chip">Seppia</button>
+        <button data-filter="night" class="appearance-chip">Notte</button>
+      </div>
+      <label class="appearance-slider">
+        <span>Luminosità</span>
+        <input id="brightness-slider" type="range" min="55" max="120" value="100" aria-label="Luminosità">
+      </label>
+    </div>
+
     <div id="pdf-scroll" class="pdf-scroll">
       <div id="pdf-pages" class="pdf-pages"></div>
     </div>
@@ -166,6 +185,7 @@
         <div class="side-panel__tabs">
           <button class="side-panel__tab side-panel__tab--active" data-tab="bookmarks">Segnalibri</button>
           <button class="side-panel__tab" data-tab="quotes">Citazioni</button>
+          <button class="side-panel__tab" data-tab="outline">Indice</button>
         </div>
         <button id="panel-close" class="icon-btn" aria-label="Chiudi pannello">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
@@ -173,6 +193,7 @@
       </div>
       <div id="bookmarks-list" class="side-panel__list"></div>
       <div id="quotes-list" class="side-panel__list" hidden></div>
+      <div id="outline-list" class="side-panel__list" hidden></div>
     </div>
   </section>
 
@@ -226,6 +247,22 @@
           <option value="read">Letto</option>
         </select>
       </label>
+      <div class="field">
+        <span>Valutazione</span>
+        <div id="meta-rating" class="star-rating" role="radiogroup" aria-label="Valutazione">
+          <button type="button" class="star" data-v="1" aria-label="1 stella">★</button>
+          <button type="button" class="star" data-v="2" aria-label="2 stelle">★</button>
+          <button type="button" class="star" data-v="3" aria-label="3 stelle">★</button>
+          <button type="button" class="star" data-v="4" aria-label="4 stelle">★</button>
+          <button type="button" class="star" data-v="5" aria-label="5 stelle">★</button>
+          <button type="button" id="meta-rating-clear" class="star-clear" aria-label="Azzera valutazione">✕</button>
+        </div>
+      </div>
+      <label class="field">
+        <span>Recensione / note personali</span>
+        <textarea id="meta-review" rows="3" placeholder="Cosa ne pensi di questo libro?"></textarea>
+      </label>
+      <div id="meta-dates" class="meta-dates" hidden></div>
       <div class="modal__actions">
         <button id="meta-cancel" class="btn btn--ghost">Annulla</button>
         <button id="meta-save" class="btn btn--primary">Salva nello scaffale</button>

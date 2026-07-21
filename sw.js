@@ -1,4 +1,4 @@
-const CACHE_NAME = 'booknest-v3';
+const CACHE_NAME = 'booknest-v4';
 
 const APP_SHELL = [
   './',
@@ -45,17 +45,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else (app files, incl. pdf.js in vendor/): stale-while-revalidate
+  const url = new URL(req.url);
+  // Large, immutable assets (pdf.js + icons): cache-first for speed & offline
+  const isStatic = url.pathname.includes('/vendor/') || url.pathname.includes('/icons/');
+
+  if (isStatic) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res && res.status === 200) cache.put(req, res.clone());
+        return res;
+      })
+    );
+    return;
+  }
+
+  // App code (html/css/js/json): network-first so updates apply immediately,
+  // falling back to cache when offline.
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const cached = await cache.match(req);
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) cache.put(req, res.clone());
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
+      try {
+        const res = await fetch(req);
+        if (res && res.status === 200) cache.put(req, res.clone());
+        return res;
+      } catch (e) {
+        const cached = await cache.match(req);
+        return cached || Response.error();
+      }
     })
   );
 });
