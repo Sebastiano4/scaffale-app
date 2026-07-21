@@ -1,4 +1,4 @@
-const CACHE_NAME = 'booknest-v6';
+const CACHE_NAME = 'booknest-v7';
 
 const APP_SHELL = [
   './',

@@ -193,17 +193,27 @@
       <button id="goto-go" class="btn btn--primary btn--sm">Vai</button>
     </div>
 
-    <!-- Reading appearance (filter + brightness) -->
+    <!-- Reading appearance (filtro + regolazioni personalizzabili) -->
     <div id="appearance-popover" class="appearance-popover" hidden>
       <div class="appearance-popover__row" id="appearance-filters">
         <button data-filter="none" class="appearance-chip">Normale</button>
         <button data-filter="sepia" class="appearance-chip">Seppia</button>
+        <button data-filter="grey" class="appearance-chip">Grigio</button>
         <button data-filter="night" class="appearance-chip">Notte</button>
       </div>
       <label class="appearance-slider">
-        <span>Luminosità</span>
+        <span>Luminosità <b id="brightness-val">100%</b></span>
         <input id="brightness-slider" type="range" min="55" max="120" value="100" aria-label="Luminosità">
       </label>
+      <label class="appearance-slider">
+        <span>Contrasto <b id="contrast-val">100%</b></span>
+        <input id="contrast-slider" type="range" min="70" max="150" value="100" aria-label="Contrasto">
+      </label>
+      <label class="appearance-slider">
+        <span>Calore <b id="warmth-val">0%</b></span>
+        <input id="warmth-slider" type="range" min="0" max="80" value="0" aria-label="Calore">
+      </label>
+      <button id="appearance-reset" class="appearance-reset" type="button">Ripristina valori</button>
     </div>
 
     <div id="pdf-scroll" class="pdf-scroll">

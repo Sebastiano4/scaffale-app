@@ -951,19 +951,45 @@ function persistProgress() {
   }, 350);
 }
 
-/* ---- reading appearance: filter (normal/sepia/night) + brightness ---- */
+/* ---- reading appearance: fully customizable (preset + brightness + contrast + warmth) ----
+   Every setting is stored in localStorage and composed into one CSS filter string
+   (--read-filter) so the adjustments stack on top of the chosen preset. */
+const READ_DEFAULTS = { brightness: 100, contrast: 100, warmth: 0 };
+function readAppearance() {
+  return {
+    preset: localStorage.getItem('booknest-readfilter') || 'none',
+    brightness: Number(localStorage.getItem('booknest-brightness') || READ_DEFAULTS.brightness),
+    contrast: Number(localStorage.getItem('booknest-contrast') || READ_DEFAULTS.contrast),
+    warmth: Number(localStorage.getItem('booknest-warmth') || READ_DEFAULTS.warmth),
+  };
+}
 function applyReadingFilter() {
-  const mode = localStorage.getItem('booknest-readfilter') || 'none';
-  const brightness = Number(localStorage.getItem('booknest-brightness') || 100);
+  const s = readAppearance();
   const scroll = $('#pdf-scroll');
-  scroll.classList.toggle('filter-sepia', mode === 'sepia');
-  scroll.classList.toggle('filter-night', mode === 'night');
-  scroll.style.setProperty('--read-brightness', (brightness / 100).toFixed(2));
+  scroll.classList.toggle('filter-night', s.preset === 'night');
+
+  // warmth (0..1). A sepia preset adds a comfortable baseline warmth.
+  let warm = s.warmth / 100;
+  if (s.preset === 'sepia') warm = Math.max(warm, 0.5);
+
+  const parts = [];
+  if (s.preset === 'night') parts.push('invert(0.92)', 'hue-rotate(180deg)');
+  if (s.preset === 'grey') parts.push('grayscale(1)');
+  parts.push(`brightness(${(s.brightness / 100).toFixed(2)})`);
+  parts.push(`contrast(${(s.contrast / 100).toFixed(2)})`);
+  if (warm > 0.001) parts.push(`sepia(${warm.toFixed(2)})`);
+  scroll.style.setProperty('--read-filter', parts.join(' '));
+
   // reflect current state in the appearance popover
   document.querySelectorAll('#appearance-filters .appearance-chip').forEach((c) =>
-    c.classList.toggle('appearance-chip--active', c.dataset.filter === mode));
-  const slider = $('#brightness-slider');
-  if (slider) slider.value = brightness;
+    c.classList.toggle('appearance-chip--active', c.dataset.filter === s.preset));
+  const set = (id, val, label, suffix = '%') => {
+    const inp = $(id); if (inp) inp.value = val;
+    const out = $(label); if (out) out.textContent = val + suffix;
+  };
+  set('#brightness-slider', s.brightness, '#brightness-val');
+  set('#contrast-slider', s.contrast, '#contrast-val');
+  set('#warmth-slider', s.warmth, '#warmth-val');
 }
 $('#filter-toggle').addEventListener('click', () => {
   const pop = $('#appearance-popover');
@@ -978,6 +1004,21 @@ document.querySelectorAll('#appearance-filters .appearance-chip').forEach((chip)
 });
 $('#brightness-slider').addEventListener('input', (e) => {
   localStorage.setItem('booknest-brightness', e.target.value);
+  applyReadingFilter();
+});
+$('#contrast-slider').addEventListener('input', (e) => {
+  localStorage.setItem('booknest-contrast', e.target.value);
+  applyReadingFilter();
+});
+$('#warmth-slider').addEventListener('input', (e) => {
+  localStorage.setItem('booknest-warmth', e.target.value);
+  applyReadingFilter();
+});
+$('#appearance-reset').addEventListener('click', () => {
+  localStorage.setItem('booknest-readfilter', 'none');
+  localStorage.setItem('booknest-brightness', READ_DEFAULTS.brightness);
+  localStorage.setItem('booknest-contrast', READ_DEFAULTS.contrast);
+  localStorage.setItem('booknest-warmth', READ_DEFAULTS.warmth);
   applyReadingFilter();
 });
 // close the goto / appearance popovers when tapping elsewhere
@@ -1066,20 +1107,15 @@ async function renderContinuous() {
     await buildTextLayer(wrap, textContent, viewport);
   };
 
+  // IntersectionObserver only drives lazy rendering (render slightly ahead of view).
+  // The "current page" is tracked separately from scroll position (see below), because
+  // a page taller than the viewport never reaches a high intersection ratio, which used
+  // to leave the page counter stuck or jumping.
   const io = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) renderPageInto(entry.target);
-      if (entry.isIntersecting && entry.intersectionRatio > 0.55) {
-        const n = Number(entry.target.dataset.page);
-        if (n !== state.reader.currentPage) {
-          state.reader.currentPage = n;
-          notePageSeen(n);
-          updateProgressUI();
-          persistProgress();
-        }
-      }
     });
-  }, { root: $('#pdf-scroll'), threshold: [0, 0.55] });
+  }, { root: $('#pdf-scroll'), rootMargin: '300px 0px', threshold: 0 });
 
   wraps.forEach((w) => io.observe(w));
   state.reader.io = io;
@@ -1091,6 +1127,40 @@ async function renderContinuous() {
     if (target) $('#pdf-scroll').scrollTop = Math.max(0, target.offsetTop - 8);
   });
 }
+
+/* ---- current page tracking while scrolling (continuous mode) ----
+   Picks the page crossing a reference line ~38% down the viewport. This is robust
+   even when a page is taller than the viewport, unlike an intersection-ratio test. */
+function updateCurrentPageFromScroll() {
+  if (state.reader.mode !== 'continuous' || !state.reader.pdfDoc) return;
+  const scroll = $('#pdf-scroll');
+  const wraps = scroll.querySelectorAll('.pdf-page-wrap');
+  if (!wraps.length) return;
+  const sr = scroll.getBoundingClientRect();
+  const line = sr.top + sr.height * 0.38;
+  let page = null;
+  for (const w of wraps) {
+    const r = w.getBoundingClientRect();
+    if (r.top <= line && r.bottom >= line) { page = Number(w.dataset.page); break; }
+    // once we've scrolled past the line, the last page above it is the best guess
+    if (r.top > line) break;
+    page = Number(w.dataset.page);
+  }
+  if (page && page !== state.reader.currentPage) {
+    state.reader.currentPage = page;
+    notePageSeen(page);
+    updateProgressUI();
+    persistProgress();
+  }
+}
+(() => {
+  let ticking = false;
+  $('#pdf-scroll').addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { ticking = false; updateCurrentPageFromScroll(); });
+  }, { passive: true });
+})();
 
 /* ---- rendering: paginated mode ---- */
 async function renderPaginated() {
@@ -1237,22 +1307,43 @@ function applyQuoteHighlights(wrap) {
   }
 }
 
-/* Capture selection rectangles as fractions of the page wrap (0..1). */
+/* Capture selection rectangles as fractions of the page wrap (0..1).
+   getClientRects() often returns many fragmented (sometimes overlapping) rects —
+   one per text span. We merge them into one tidy box per visual line so the saved
+   highlight follows the text precisely instead of looking patchy. */
 function captureQuoteRects(range, wrap) {
   if (!range || !wrap) return [];
   const wr = wrap.getBoundingClientRect();
   if (!wr.width || !wr.height) return [];
-  const out = [];
+
+  // collect usable rects in wrap-local pixel space
+  const raw = [];
   for (const r of range.getClientRects()) {
-    if (r.width < 1 || r.height < 1) continue;
-    out.push({
-      x: (r.left - wr.left) / wr.width,
-      y: (r.top - wr.top) / wr.height,
-      w: r.width / wr.width,
-      h: r.height / wr.height,
-    });
+    if (r.width < 1 || r.height < 2) continue;
+    raw.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
   }
-  return out;
+  if (!raw.length) return [];
+
+  // group rects that belong to the same line (vertical overlap), union horizontally
+  raw.sort((a, b) => a.top - b.top || a.left - b.left);
+  const lines = [];
+  for (const r of raw) {
+    const mid = (r.top + r.bottom) / 2;
+    const g = lines.find((L) => mid >= L.top && mid <= L.bottom);
+    if (g) {
+      g.left = Math.min(g.left, r.left); g.right = Math.max(g.right, r.right);
+      g.top = Math.min(g.top, r.top); g.bottom = Math.max(g.bottom, r.bottom);
+    } else {
+      lines.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+    }
+  }
+
+  return lines.map((L) => ({
+    x: L.left / wr.width,
+    y: L.top / wr.height,
+    w: (L.right - L.left) / wr.width,
+    h: (L.bottom - L.top) / wr.height,
+  }));
 }
 function refreshQuoteHighlights(page) {
   const wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
