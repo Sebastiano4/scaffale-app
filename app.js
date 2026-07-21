@@ -1752,7 +1752,6 @@ renderStatusBar = function () {
   if (!btn || !panel) return;
 
   btn.addEventListener('click', () => { panel.hidden = !panel.hidden; });
-  $('#sidebar-menu-stats').addEventListener('click', () => { panel.hidden = true; $('#menu-stats').click(); });
   $('#sidebar-menu-export').addEventListener('click', () => { panel.hidden = true; $('#menu-export').click(); });
   $('#sidebar-menu-import').addEventListener('click', () => { panel.hidden = true; $('#menu-import').click(); });
   $('#sidebar-theme-toggle').addEventListener('click', () => $('#theme-toggle').click());
