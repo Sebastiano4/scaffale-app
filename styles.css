@@ -797,10 +797,18 @@ button { font-family: inherit; }
 .lib-main { display: contents; }
 .lib-toolbar { display: contents; } /* trasparente sotto i 900px */
 .lib-sort { display: none; }
+.lib-sidebar-toggle { display: none; } /* solo su tablet/desktop */
 
 @media (min-width: 900px) {
 
   #library-view.view--active { display: flex; flex-direction: row; }
+
+  /* toggle per aprire/chiudere la sidebar */
+  .lib-sidebar-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  #library-view.sidebar-collapsed .lib-sidebar { display: none; }
 
   .lib-sidebar {
     display: flex;

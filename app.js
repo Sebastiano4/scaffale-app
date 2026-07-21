@@ -1707,3 +1707,16 @@ renderStatusBar = function () {
 
   paint();
 })();
+
+/* ---- toggle apri/chiudi la sidebar (solo tablet/desktop), stato persistente ---- */
+(function initSidebarToggle() {
+  const KEY = 'booknest-sidebar-collapsed';
+  const view = $('#library-view');
+  const btn = $('#sidebar-toggle');
+  if (!view || !btn) return;
+  if (localStorage.getItem(KEY) === '1') view.classList.add('sidebar-collapsed');
+  btn.addEventListener('click', () => {
+    const collapsed = view.classList.toggle('sidebar-collapsed');
+    localStorage.setItem(KEY, collapsed ? '1' : '0');
+  });
+})();
