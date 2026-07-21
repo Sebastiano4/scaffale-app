@@ -1232,6 +1232,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     $('#side-panel').hidden = true;
     $('#selection-popover').hidden = true;
+    window.getSelection().removeAllRanges();
+    clearLiveSelection();
     return;
   }
   if (state.reader.mode === 'paginated') {
@@ -1307,38 +1309,43 @@ function applyQuoteHighlights(wrap) {
   }
 }
 
-/* Capture selection rectangles as fractions of the page wrap (0..1).
-   getClientRects() often returns many fragmented (sometimes overlapping) rects —
-   one per text span. We merge them into one tidy box per visual line so the saved
-   highlight follows the text precisely instead of looking patchy. */
+/* Merge the fragmented client-rects of a selection into ONE uniform box per
+   visual line. getClientRects() returns one rect per text span, and pdf.js spans
+   have mixed font sizes (body text, superscript footnote numbers, …) so the raw
+   rects have uneven heights/positions. We size every line to the *median* glyph
+   height and center it on the body text, so the highlight bands are homogeneous.
+   Input/output are in wrap-local pixel space: [{left,top,right,bottom}]. */
+function mergeRectsToLines(rects) {
+  const items = rects.filter((r) => (r.right - r.left) >= 1 && (r.bottom - r.top) >= 2);
+  if (!items.length) return [];
+  const heights = items.map((r) => r.bottom - r.top).sort((a, b) => a - b);
+  const bodyH = heights[Math.floor(heights.length / 2)] || heights[0];
+  items.sort((a, b) => a.top - b.top || a.left - b.left);
+  const lines = [];
+  for (const r of items) {
+    const cy = (r.top + r.bottom) / 2;
+    let g = lines.find((L) => Math.abs(cy - L.cy) <= bodyH * 0.7);
+    if (!g) { g = { cy, left: r.left, right: r.right, sumCy: 0, nTall: 0 }; lines.push(g); }
+    g.left = Math.min(g.left, r.left);
+    g.right = Math.max(g.right, r.right);
+    // refine the vertical center using only full-height (body) rects, so
+    // superscripts don't pull the band up or change its height
+    if ((r.bottom - r.top) >= bodyH * 0.8) { g.sumCy += cy; g.nTall++; g.cy = g.sumCy / g.nTall; }
+  }
+  return lines.map((L) => ({ left: L.left, right: L.right, top: L.cy - bodyH / 2, bottom: L.cy + bodyH / 2 }));
+}
+
+/* Capture selection rectangles as fractions of the page wrap (0..1), one tidy
+   uniform box per line, so saved highlights match the text precisely. */
 function captureQuoteRects(range, wrap) {
   if (!range || !wrap) return [];
   const wr = wrap.getBoundingClientRect();
   if (!wr.width || !wr.height) return [];
-
-  // collect usable rects in wrap-local pixel space
-  const raw = [];
+  const local = [];
   for (const r of range.getClientRects()) {
-    if (r.width < 1 || r.height < 2) continue;
-    raw.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
+    local.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
   }
-  if (!raw.length) return [];
-
-  // group rects that belong to the same line (vertical overlap), union horizontally
-  raw.sort((a, b) => a.top - b.top || a.left - b.left);
-  const lines = [];
-  for (const r of raw) {
-    const mid = (r.top + r.bottom) / 2;
-    const g = lines.find((L) => mid >= L.top && mid <= L.bottom);
-    if (g) {
-      g.left = Math.min(g.left, r.left); g.right = Math.max(g.right, r.right);
-      g.top = Math.min(g.top, r.top); g.bottom = Math.max(g.bottom, r.bottom);
-    } else {
-      lines.push({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
-    }
-  }
-
-  return lines.map((L) => ({
+  return mergeRectsToLines(local).map((L) => ({
     x: L.left / wr.width,
     y: L.top / wr.height,
     w: (L.right - L.left) / wr.width,
@@ -1350,16 +1357,54 @@ function refreshQuoteHighlights(page) {
   if (wrap) applyQuoteHighlights(wrap);
 }
 
+/* ---- live selection overlay ----
+   The native ::selection band is uneven (mixed font sizes per span). We hide it
+   (CSS) and paint our own uniform per-line bands as the user drags, using the
+   same line-merge as saved highlights so the two always look identical. */
+function clearLiveSelection() {
+  document.querySelectorAll('.sel-live-layer').forEach((l) => l.remove());
+}
+function drawLiveSelection(range) {
+  clearLiveSelection();
+  if (!range) return;
+  const rects = [...range.getClientRects()];
+  if (!rects.length) return;
+  document.querySelectorAll('#pdf-pages .pdf-page-wrap').forEach((wrap) => {
+    const wr = wrap.getBoundingClientRect();
+    const local = [];
+    for (const r of rects) {
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      if (cx >= wr.left && cx <= wr.right && cy >= wr.top && cy <= wr.bottom) {
+        local.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
+      }
+    }
+    const lines = mergeRectsToLines(local);
+    if (!lines.length) return;
+    const layer = el('div', 'sel-live-layer');
+    lines.forEach((L) => {
+      const b = el('div', 'sel-live-box');
+      b.style.left = L.left + 'px';
+      b.style.top = L.top + 'px';
+      b.style.width = (L.right - L.left) + 'px';
+      b.style.height = (L.bottom - L.top) + 'px';
+      layer.appendChild(b);
+    });
+    wrap.appendChild(layer);
+  });
+}
+
 /* ---- text selection -> save as quote ---- */
 document.addEventListener('selectionchange', () => {
   if (!state.reader.book || $('#reader-view').classList.contains('view--active') === false) return;
   const sel = window.getSelection();
   const text = sel.toString().trim();
   const popover = $('#selection-popover');
-  if (!text || sel.rangeCount === 0) { popover.hidden = true; return; }
+  if (!text || sel.rangeCount === 0) { popover.hidden = true; clearLiveSelection(); return; }
   const range = sel.getRangeAt(0);
   const anchorNode = range.startContainer.nodeType === 3 ? range.startContainer.parentElement : range.startContainer;
-  if (!anchorNode || !anchorNode.closest('.textLayer')) { popover.hidden = true; return; }
+  if (!anchorNode || !anchorNode.closest('.textLayer')) { popover.hidden = true; clearLiveSelection(); return; }
+
+  drawLiveSelection(range);
 
   const rect = range.getBoundingClientRect();
   const scrollRect = $('#pdf-scroll').getBoundingClientRect();
@@ -1398,6 +1443,7 @@ $('#save-highlight-btn').addEventListener('click', async () => {
   popover._rects = [];
   popover.hidden = true;
   window.getSelection().removeAllRanges();
+  clearLiveSelection();
   refreshQuoteHighlights(page);
   showToast('Citazione salvata ed evidenziata');
   if (!$('#side-panel').hidden) renderSidePanel();

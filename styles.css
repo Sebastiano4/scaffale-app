@@ -399,8 +399,16 @@ button { font-family: inherit; }
   cursor: text;
   transform-origin: 0% 0%;
 }
-/* NOTE: opacity is ignored inside ::selection — the color itself must be translucent */
-.pdf-page-wrap .textLayer ::selection { background: rgba(227, 165, 72, 0.35); }
+/* The native ::selection band is uneven across mixed font sizes (superscripts,
+   etc.), so we hide it and paint uniform per-line bands ourselves (.sel-live-box). */
+.pdf-page-wrap .textLayer ::selection { background: transparent; }
+.sel-live-layer { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.sel-live-box {
+  position: absolute;
+  background: rgba(227, 165, 72, 0.32);
+  border-radius: 2px;
+  mix-blend-mode: multiply;
+}
 .pdf-page-wrap .search-highlight { background: rgba(227, 165, 72, 0.45) !important; color: transparent; border-radius: 2px; }
 .pdf-page-wrap .quote-highlight { background: rgba(227, 165, 72, 0.24); border-radius: 2px; }
 
