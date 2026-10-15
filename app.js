@@ -1,285 +1,10 @@
-import * as pdfjsLib from './vendor/pdf.min.mjs';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.min.mjs';
-
-/* ======================================================================
-   DB — tiny promise wrapper around IndexedDB
-   ====================================================================== */
-const DB = (() => {
-  let dbp = null;
-  function open() {
-    if (dbp) return dbp;
-    dbp = new Promise((resolve, reject) => {
-      const req = indexedDB.open('scaffale-db', 1);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains('books')) {
-          db.createObjectStore('books', { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    return dbp;
-  }
-  async function tx(store, mode) {
-    const db = await open();
-    return db.transaction(store, mode).objectStore(store);
-  }
-  return {
-    async all() {
-      const store = await tx('books', 'readonly');
-      return new Promise((res, rej) => {
-        const r = store.getAll();
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-    },
-    async get(id) {
-      const store = await tx('books', 'readonly');
-      return new Promise((res, rej) => {
-        const r = store.get(id);
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-    },
-    async put(book) {
-      const store = await tx('books', 'readwrite');
-      return new Promise((res, rej) => {
-        const r = store.put(book);
-        r.onsuccess = () => res();
-        r.onerror = () => rej(r.error);
-      });
-    },
-    async delete(id) {
-      const store = await tx('books', 'readwrite');
-      return new Promise((res, rej) => {
-        const r = store.delete(id);
-        r.onsuccess = () => res();
-        r.onerror = () => rej(r.error);
-      });
-    },
-  };
-})();
-
-/* ======================================================================
-   Helpers
-   ====================================================================== */
-const $ = (sel) => document.querySelector(sel);
-const el = (tag, cls, html) => {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (html != null) n.innerHTML = html;
-  return n;
-};
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-
-function showToast(msg, ms = 2200) {
-  const t = $('#toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => (t.hidden = true), ms);
-}
-
-function titleCase(s) {
-  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-}
-
-// Guess { title, author } from a filename when PDF metadata is missing.
-function guessFromFilename(filename) {
-  let base = filename.replace(/\.pdf$/i, '');
-  base = base.replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
-
-  const seps = [' - ', ' – ', ' — '];
-  let parts = null;
-  for (const sep of seps) {
-    if (base.includes(sep)) { parts = base.split(sep).map((s) => s.trim()); break; }
-  }
-
-  if (parts && parts.length >= 2) {
-    const [a, b] = [parts[0], parts.slice(1).join(' - ')];
-    const wordsA = a.split(' ').filter(Boolean);
-    // Short, capitalized, comma-free chunk looks like "Author Name"
-    const looksLikeName = (s, words) =>
-      words.length <= 4 && !/\d/.test(s) && words.every((w) => /^[A-ZÀ-Ý]/.test(w));
-    if (looksLikeName(a, wordsA)) {
-      return { title: titleCase(b), author: titleCase(a) };
-    }
-    return { title: titleCase(a), author: titleCase(b) };
-  }
-
-  return { title: titleCase(base) || 'Untitled', author: '' };
-}
-
-async function extractMetadata(pdfDoc, filename) {
-  let title = '', author = '';
-  try {
-    const meta = await pdfDoc.getMetadata();
-    title = (meta.info && meta.info.Title || '').trim();
-    author = (meta.info && meta.info.Author || '').trim();
-  } catch (e) { /* ignore */ }
-
-  const guess = guessFromFilename(filename);
-  return {
-    title: title || guess.title,
-    author: author || guess.author,
-  };
-}
-
-async function renderThumbnail(pdfDoc) {
-  const page = await pdfDoc.getPage(1);
-  const baseVp = page.getViewport({ scale: 1 });
-  const targetW = 340;
-  const scale = targetW / baseVp.width;
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext('2d');
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas.toDataURL('image/jpeg', 0.75);
-}
-
-/* ======================================================================
-   App state
-   ====================================================================== */
-const state = {
-  books: [],              // cached list from DB
-  activeCategory: 'All',
-  activeStatus: 'all',    // 'all' | 'toread' | 'reading' | 'read'
-  sortBy: 'recent',       // 'recent' | 'title' | 'author' | 'progress'
-  librarySearch: '',
-  reader: {
-    book: null,
-    pdfDoc: null,
-    mode: 'continuous',    // 'continuous' | 'paginated'
-    scale: 1.05,
-    currentPage: 1,
-    textIndex: new Map(),  // pageNum -> full text (for search)
-    saveTimer: null,
-    io: null,              // IntersectionObserver
-    sessionStart: null,    // reading-time tracking
-  },
-};
-
-/* ======================================================================
-   Book status ("shelves"): manual override or derived from reading
-   ====================================================================== */
-function bookStatus(b) {
-  if (b.status && b.status !== 'auto') return b.status;
-  if (b.finishedAt) return 'read';
-  if (b.lastOpenedAt) return 'reading';
-  return 'toread';
-}
-const STATUS_LABELS = { all: 'All', toread: 'To read', reading: 'Reading', read: 'Read' };
-
-/* ======================================================================
-   Reading stats (stored in localStorage)
-   ====================================================================== */
-const Stats = {
-  key: 'booknest-stats',
-  load() {
-    try { return JSON.parse(localStorage.getItem(this.key)) || { days: {} }; }
-    catch (e) { return { days: {} }; }
-  },
-  save(s) { try { localStorage.setItem(this.key, JSON.stringify(s)); } catch (e) { /* full */ } },
-  dayKey(offset = 0) {
-    const d = new Date(); d.setDate(d.getDate() - offset);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  },
-  bump(field, amount) {
-    const s = this.load();
-    const k = this.dayKey();
-    const day = s.days[k] || (s.days[k] = { pages: 0, seconds: 0 });
-    day[field] += amount;
-    this.save(s);
-  },
-  addPages(n) { this.bump('pages', n); },
-  addSeconds(sec) { if (sec > 0 && sec < 60 * 60 * 12) this.bump('seconds', sec); },
-  summary() {
-    const s = this.load();
-    const today = s.days[this.dayKey()] || { pages: 0, seconds: 0 };
-    let wPages = 0, wSeconds = 0, streak = 0;
-    for (let i = 0; i < 7; i++) {
-      const d = s.days[this.dayKey(i)];
-      if (d) { wPages += d.pages; wSeconds += d.seconds; }
-    }
-    for (let i = 0; i < 365; i++) {
-      const d = s.days[this.dayKey(i)];
-      if (d && (d.pages > 0 || d.seconds > 60)) streak++;
-      else if (i > 0) break; // today can still be empty without breaking the streak
-    }
-    return { today, wPages, wSeconds, streak };
-  },
-};
-
-/* ---- Reading goal (books or pages, per week or per year) ---- */
-const Goal = {
-  key: 'booknest-goal',
-  load() { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
-  save(g) { try { localStorage.setItem(this.key, JSON.stringify(g)); } catch (e) { /* full */ } },
-  clear() { localStorage.removeItem(this.key); },
-  // returns { done, target, label, pct } or null
-  progress(books) {
-    const g = this.load();
-    if (!g || !g.target) return null;
-    const now = new Date();
-    let done = 0, label = '';
-    if (g.type === 'books') {
-      if (g.period === 'year') {
-        const y = now.getFullYear();
-        done = books.filter((b) => b.finishedAt && new Date(b.finishedAt).getFullYear() === y).length;
-        label = g.target + ' books in ' + y;
-      } else {
-        const weekAgo = Date.now() - 7 * 864e5;
-        done = books.filter((b) => b.finishedAt && b.finishedAt >= weekAgo).length;
-        label = g.target + ' books per week';
-      }
-    } else { // pages
-      const s = Stats.load();
-      if (g.period === 'year') {
-        const y = String(now.getFullYear());
-        done = Object.entries(s.days).reduce((sum, [k, v]) => k.startsWith(y) ? sum + (v.pages || 0) : sum, 0);
-        label = g.target + ' pages in ' + now.getFullYear();
-      } else {
-        done = Stats.summary().wPages;
-        label = g.target + ' pages per week';
-      }
-    }
-    return { done, target: g.target, label, pct: Math.min(100, Math.round((done / g.target) * 100)) };
-  },
-};
-
-function flushReadingTime() {
-  if (state.reader.sessionStart) {
-    Stats.addSeconds(Math.round((Date.now() - state.reader.sessionStart) / 1000));
-    state.reader.sessionStart = null;
-  }
-}
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') flushReadingTime();
-  else if (state.reader.book && $('#reader-view').classList.contains('view--active')) state.reader.sessionStart = Date.now();
-});
-window.addEventListener('pagehide', flushReadingTime);
-
-/* ======================================================================
-   Theme
-   ====================================================================== */
-function applyTheme(theme) {
-  document.body.dataset.theme = theme;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#14171F' : '#F6F1E4');
-}
-function initTheme() {
-  // 'scaffale-theme' kept as fallback so an older install keeps its choice
-  applyTheme(localStorage.getItem('booknest-theme') || localStorage.getItem('scaffale-theme') || 'dark');
-}
-$('#theme-toggle').addEventListener('click', () => {
-  const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  localStorage.setItem('booknest-theme', next);
-});
+import { pdfjsLib } from './js/pdf.js';
+import { state, bookStatus, STATUS_LABELS } from './js/state.js';
+import { $, el, uid, showToast, escapeHtml, fmtDate, fmtMinutes } from './js/dom.js';
+import { DB } from './js/db.js';
+import { extractMetadata, renderThumbnail } from './js/metadata.js';
+import { Stats, Goal, flushReadingTime, initReadingTimeTracking } from './js/stats.js';
+import { initTheme } from './js/theme.js';
 
 /* ======================================================================
    Library view
@@ -415,10 +140,6 @@ function renderGrid() {
   });
 }
 
-function escapeHtml(s) {
-  return (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 /* ---- library search ---- */
 $('#library-search-btn').addEventListener('click', () => {
   $('#library-search-bar').hidden = false;
@@ -479,12 +200,6 @@ async function addBookFromFile(file) {
 
 /* ---- metadata modal (used for add-fallback edits and later edits) ---- */
 let modalCtx = null; // { mode: 'edit', book }
-
-function fmtDate(ts) {
-  if (!ts) return '—';
-  try { return new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }); }
-  catch (e) { return '—'; }
-}
 
 function paintStars(rating) {
   document.querySelectorAll('#meta-rating .star').forEach((s) => {
@@ -664,12 +379,6 @@ $('#import-input').addEventListener('change', async (e) => {
     showToast('Invalid backup file');
   }
 });
-
-function fmtMinutes(seconds) {
-  const m = Math.round(seconds / 60);
-  if (m < 60) return m + ' min';
-  return Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
-}
 
 function statTotals() {
   const s = Stats.load();
@@ -1774,6 +1483,7 @@ function highlightQueryOnPage(page, q) {
    Init
    ====================================================================== */
 initTheme();
+initReadingTimeTracking();
 loadLibrary();
 
 if ('serviceWorker' in navigator) {
