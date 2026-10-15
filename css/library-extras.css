@@ -4,7 +4,7 @@
 
 /* ---- card ⋮ menu, undo toast ---- */
 .book-card__menu-btn {
-  position: absolute; top: 6px; right: 6px; z-index: 2;
+  position: absolute; top: 6px; left: 6px; z-index: 2; /* left: the progress ribbon owns the top-right corner */
   width: 30px; height: 30px; border-radius: 50%; border: 0;
   background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
 }

@@ -65,7 +65,7 @@ function openCardMenu(book, anchor) {
   cardMenuBook = book;
   const r = anchor.getBoundingClientRect();
   menu.style.top = (r.bottom + 4) + 'px';
-  menu.style.left = Math.max(8, r.right - 150) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 158)) + 'px';
   menu.hidden = false;
 }
 
