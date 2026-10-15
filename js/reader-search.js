@@ -17,6 +17,17 @@ function setProgress(done, total) {
   p.textContent = 'Indexing ' + done + '/' + total + '…';
 }
 
+/* Text of page n of pdfDoc, cached in that book's textIndex (never in a later book's). */
+export async function getPageText(pdfDoc, n) {
+  const index = state.reader.textIndex; // captured now: the reader may switch book while we await
+  if (index.has(n)) return index.get(n);
+  const page = await pdfDoc.getPage(n);
+  const tc = await page.getTextContent();
+  const text = tc.items.map((i) => i.str).join(' ');
+  if (state.reader.pdfDoc === pdfDoc) index.set(n, text);
+  return text;
+}
+
 export async function buildSearchIndex() {
   const { pdfDoc } = state.reader;
   if (!pdfDoc) return;
@@ -24,12 +35,7 @@ export async function buildSearchIndex() {
   const total = pdfDoc.numPages;
   for (let n = 1; n <= total; n++) {
     if (!index.has(n)) {
-      try {
-        const page = await pdfDoc.getPage(n);
-        const tc = await page.getTextContent();
-        if (state.reader.pdfDoc !== pdfDoc) return;
-        index.set(n, tc.items.map((i) => i.str).join(' '));
-      } catch (e) { /* ignore */ }
+      try { await getPageText(pdfDoc, n); } catch (e) { /* ignore */ }
     }
     if (state.reader.pdfDoc !== pdfDoc) return; // reader closed / changed book meanwhile
     if (n % 10 === 0 || n === total) setProgress(n, total);
