@@ -28,3 +28,8 @@ test('starts with local-file signature PK\x03\x04', async () => {
 test('readZip rejects non-zip', async () => {
   await assert.rejects(readZip(new Blob(['not a zip at all'])), /not a zip/);
 });
+
+test('createZip refuses archives over 4 GB instead of corrupting them', async () => {
+  class Big extends Blob { get size() { return 0xFFFFFFF0; } }
+  await assert.rejects(createZip([{ name: 'a.pdf', data: new Big([]) }, { name: 'b.pdf', data: new Big([]) }]), /too large/);
+});

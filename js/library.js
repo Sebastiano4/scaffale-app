@@ -20,12 +20,20 @@ async function refreshStorageInfo() {
 const UNDO_MS = 6000;
 let pending = null; // { ids: Set<string>, timer }
 
-export async function flushPendingDeletes() {
-  if (!pending) return;
+let flushing = Promise.resolve();
+
+export function flushPendingDeletes() {
+  if (!pending) return flushing;
   const { ids, timer } = pending;
   pending = null;
   clearTimeout(timer);
-  for (const id of ids) { try { await DB.delete(id); } catch (e) { console.error(e); } }
+  // the delete is final: an Undo button still on screen would be a lie
+  const t = $('#toast');
+  if (t && t.querySelector('.toast__action')) t.hidden = true;
+  flushing = flushing.then(async () => {
+    for (const id of ids) { try { await DB.delete(id); } catch (e) { console.error(e); } }
+  });
+  return flushing;
 }
 
 export function deleteBooksWithUndo(ids) {
@@ -33,11 +41,15 @@ export function deleteBooksWithUndo(ids) {
   const set = new Set(ids);
   state.books = state.books.filter((b) => !set.has(b.id));
   renderStatusBar(); renderCategoryBar(); renderGrid();
-  pending = { ids: set, timer: setTimeout(flushPendingDeletes, UNDO_MS) };
+  const mine = { ids: set, timer: setTimeout(flushPendingDeletes, UNDO_MS) };
+  pending = mine;
   const msg = set.size === 1 ? 'Book deleted' : set.size + ' books deleted';
   showToast(msg, UNDO_MS, {
     label: 'Undo',
-    onClick: () => { clearTimeout(pending && pending.timer); pending = null; loadLibrary(); },
+    onClick: () => {
+      if (pending !== mine) { showToast('Too late to undo'); return; }
+      clearTimeout(mine.timer); pending = null; loadLibrary();
+    },
   });
 }
 
@@ -70,6 +82,7 @@ function openCardMenu(book, anchor) {
 }
 
 export async function loadLibrary() {
+  await flushing;
   state.books = await DB.all();
   if (pending) state.books = state.books.filter((b) => !pending.ids.has(b.id));
   renderStatusBar();
@@ -133,6 +146,7 @@ export function renderGrid() {
   const fab = $('#fab-add');
 
   if (state.books.length === 0) {
+    selected.clear(); updateSelectionBar();
     grid.hidden = true; grid.innerHTML = '';
     noResults.hidden = true;
     empty.hidden = false;
@@ -147,6 +161,10 @@ export function renderGrid() {
   if (state.activeStatus !== 'all') list = list.filter((b) => bookStatus(b) === state.activeStatus);
   if (state.activeCategory !== 'All') list = list.filter((b) => b.category === state.activeCategory);
   if (q) list = list.filter((b) => (b.title + ' ' + b.author).toLowerCase().includes(q));
+
+  // a filter/search change must not leave hidden books selected for deletion
+  for (const id of [...selected]) if (!list.some((b) => b.id === id)) selected.delete(id);
+  updateSelectionBar();
 
   if (list.length === 0) {
     grid.hidden = true; grid.innerHTML = '';
@@ -226,6 +244,7 @@ async function findBookByHash(hash) {
 }
 
 export async function addBookFromFile(file) {
+  await flushPendingDeletes(); // a just-deleted copy must really be gone before the duplicate check
   const hash = await hashBlob(file);
   const existing = await findBookByHash(hash);
   if (existing) { showToast('Already in library: ' + existing.title, 3500); return; }

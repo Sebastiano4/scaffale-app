@@ -39,3 +39,26 @@ test('modal delete uses undo (no confirm dialog)', async ({ page }) => {
   await expect(page.locator('#toast .toast__action')).toHaveText('Undo');
   expect(dialogs).toBe(0);
 });
+
+test('page hide commits the delete and removes the Undo button', async ({ page }) => {
+  await page.locator('.book-card .book-card__menu-btn').first().click();
+  await page.click('#card-menu [data-action="delete"]');
+  await expect(page.locator('#toast .toast__action')).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.locator('#toast .toast__action')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('.book-card')).toHaveCount(0);
+});
+
+test('re-adding the same PDF during the undo window keeps it', async ({ page }) => {
+  await page.locator('.book-card .book-card__menu-btn').first().click();
+  await page.click('#card-menu [data-action="delete"]');
+  await page.setInputFiles('#file-input', fixture);
+  await expect(page.locator('.book-card')).toHaveCount(1);
+  await page.waitForTimeout(6500);
+  await page.reload();
+  await expect(page.locator('.book-card')).toHaveCount(1);
+});

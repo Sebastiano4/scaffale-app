@@ -20,7 +20,10 @@ export function crc32(bytes) {
 const enc = new TextEncoder();
 const DOS_DATE_1980_01_01 = 0x21;
 
+const MAX32 = 0xFFFFFFFF;
+
 export async function createZip(entries) {
+  if (entries.length > 0xFFFF) throw new Error('zip too large: too many entries');
   const parts = [];
   const central = [];
   let offset = 0;
@@ -28,6 +31,7 @@ export async function createZip(entries) {
     const nameBytes = enc.encode(e.name);
     const blob = e.data instanceof Blob ? e.data
       : new Blob([typeof e.data === 'string' ? enc.encode(e.data) : e.data]);
+    if (offset + 30 + nameBytes.length + blob.size > MAX32) throw new Error('zip too large (4 GB max)');
     const crc = crc32(new Uint8Array(await blob.arrayBuffer()));
     const size = blob.size;
     const h = new DataView(new ArrayBuffer(30));

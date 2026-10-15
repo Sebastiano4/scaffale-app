@@ -30,3 +30,15 @@ test('cancel exits select mode', async ({ page }) => {
   await page.locator('.book-card .book-cover').first().click();
   await expect(page.locator('#reader-view')).toHaveClass(/view--active/);
 });
+
+test('selection is dropped for books hidden by a search', async ({ page }) => {
+  await freshApp(page);
+  for (const f of [a, b]) await addBook(page, f);
+  await page.locator('#select-mode-btn:visible, #sidebar-select-btn:visible').first().click();
+  await page.locator('.book-card').nth(0).locator('.book-cover').click();
+  await page.locator('.book-card').nth(1).locator('.book-cover').click();
+  await expect(page.locator('#selection-count')).toHaveText('2 selected');
+  await page.fill('#library-search-input', 'Fixture');
+  await expect(page.locator('.book-card')).toHaveCount(1);
+  await expect(page.locator('#selection-count')).toHaveText('1 selected');
+});

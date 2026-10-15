@@ -1,7 +1,7 @@
 import { $, showToast } from './dom.js';
 import { DB } from './db.js';
 import { Stats, Goal } from './stats.js';
-import { loadLibrary } from './library.js';
+import { loadLibrary, flushPendingDeletes } from './library.js';
 import { createZip, readZip } from './zip.js';
 import { buildManifest, bookFilePath, validateManifest, mergeStats } from './backup-format.js';
 
@@ -36,11 +36,12 @@ async function exportBackup() {
     showToast('Backup downloaded: ' + books.length + (books.length === 1 ? ' book' : ' books'));
   } catch (e) {
     console.error(e);
-    showToast('Error during backup');
+    showToast(/too large/.test(e.message) ? 'Library too large for a single backup (4 GB max)' : 'Error during backup');
   }
 }
 
 async function importBackup(file) {
+  await flushPendingDeletes();
   showToast('Importing the backup…', 6000);
   try {
     let count = 0;

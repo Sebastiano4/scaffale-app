@@ -30,6 +30,7 @@
 }
 .selection-bar[hidden] { display: none; }
 .selection-bar .btn:disabled { opacity: 0.45; cursor: default; }
+.select-mode .toast { bottom: calc(86px + var(--safe-bottom)); }
 .select-mode #fab-add, .select-mode .book-card__menu-btn { display: none; }
 .book-cover { position: relative; }
 .book-card--selected .book-cover { outline: 3px solid var(--accent); outline-offset: 2px; }
