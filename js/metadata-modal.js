@@ -1,6 +1,6 @@
 import { $, el, showToast, fmtDate } from './dom.js';
 import { DB } from './db.js';
-import { loadLibrary } from './library.js';
+import { loadLibrary, deleteBooksWithUndo } from './library.js';
 
 /* ---- metadata modal (used for add-fallback edits and later edits) ---- */
 let modalCtx = null; // { mode: 'edit', book }
@@ -40,13 +40,10 @@ export function openMetadataModal({ mode, book }) {
       delBtn.id = 'meta-delete';
       delBtn.style.marginTop = '4px';
       delBtn.style.width = '100%';
-      $('.modal__card').appendChild(delBtn);
-      delBtn.onclick = async () => {
-        if (!confirm('Delete "' + modalCtx.book.title + '" from the shelf?')) return;
-        await DB.delete(modalCtx.book.id);
+      $('#metadata-modal .modal__card').appendChild(delBtn);
+      delBtn.onclick = () => {
         $('#metadata-modal').hidden = true;
-        await loadLibrary();
-        showToast('Book deleted');
+        deleteBooksWithUndo([modalCtx.book.id]);
       };
     }
     delBtn.hidden = false;

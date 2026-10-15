@@ -5,15 +5,90 @@ import { DB } from './db.js';
 import { extractMetadata, renderThumbnail } from './metadata.js';
 import { openMetadataModal } from './metadata-modal.js';
 import { openReader } from './reader.js';
+import { hashBlob } from './hash.js';
+import { requestPersistence, storageInfo, formatStorageInfo } from './storage.js';
 
 /* ======================================================================
    Library view
    ====================================================================== */
+async function refreshStorageInfo() {
+  const text = formatStorageInfo(await storageInfo());
+  for (const id of ['#storage-info', '#sidebar-storage-info']) { const n = $(id); if (n) n.textContent = text; }
+}
+
+/* ---- undoable delete: books leave the view at once, the DB delete happens after UNDO_MS ---- */
+const UNDO_MS = 6000;
+let pending = null; // { ids: Set<string>, timer }
+
+let flushing = Promise.resolve();
+
+export function flushPendingDeletes() {
+  if (!pending) return flushing;
+  const { ids, timer } = pending;
+  pending = null;
+  clearTimeout(timer);
+  // the delete is final: an Undo button still on screen would be a lie
+  const t = $('#toast');
+  if (t && t.querySelector('.toast__action')) t.hidden = true;
+  flushing = flushing.then(async () => {
+    for (const id of ids) { try { await DB.delete(id); } catch (e) { console.error(e); } }
+  });
+  return flushing;
+}
+
+export function deleteBooksWithUndo(ids) {
+  flushPendingDeletes();
+  const set = new Set(ids);
+  state.books = state.books.filter((b) => !set.has(b.id));
+  renderStatusBar(); renderCategoryBar(); renderGrid();
+  const mine = { ids: set, timer: setTimeout(flushPendingDeletes, UNDO_MS) };
+  pending = mine;
+  const msg = set.size === 1 ? 'Book deleted' : set.size + ' books deleted';
+  showToast(msg, UNDO_MS, {
+    label: 'Undo',
+    onClick: () => {
+      if (pending !== mine) { showToast('Too late to undo'); return; }
+      clearTimeout(mine.timer); pending = null; loadLibrary();
+    },
+  });
+}
+
+/* ---- ⋮ menu on each card ---- */
+let cardMenuBook = null;
+
+/* ---- select mode (batch delete) ---- */
+let selectMode = false;
+const selected = new Set();
+
+function setSelectMode(on) {
+  selectMode = on;
+  selected.clear();
+  $('#selection-bar').hidden = !on;
+  $('#library-view').classList.toggle('select-mode', on);
+  updateSelectionBar();
+  renderGrid();
+}
+function updateSelectionBar() {
+  $('#selection-count').textContent = selected.size + ' selected';
+  $('#selection-delete').disabled = selected.size === 0;
+}
+function openCardMenu(book, anchor) {
+  const menu = $('#card-menu');
+  cardMenuBook = book;
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 158)) + 'px';
+  menu.hidden = false;
+}
+
 export async function loadLibrary() {
+  await flushing;
   state.books = await DB.all();
+  if (pending) state.books = state.books.filter((b) => !pending.ids.has(b.id));
   renderStatusBar();
   renderCategoryBar();
   renderGrid();
+  refreshStorageInfo();
 }
 
 export function renderStatusBar() {
@@ -71,6 +146,7 @@ export function renderGrid() {
   const fab = $('#fab-add');
 
   if (state.books.length === 0) {
+    selected.clear(); updateSelectionBar();
     grid.hidden = true; grid.innerHTML = '';
     noResults.hidden = true;
     empty.hidden = false;
@@ -85,6 +161,10 @@ export function renderGrid() {
   if (state.activeStatus !== 'all') list = list.filter((b) => bookStatus(b) === state.activeStatus);
   if (state.activeCategory !== 'All') list = list.filter((b) => b.category === state.activeCategory);
   if (q) list = list.filter((b) => (b.title + ' ' + b.author).toLowerCase().includes(q));
+
+  // a filter/search change must not leave hidden books selected for deletion
+  for (const id of [...selected]) if (!list.some((b) => b.id === id)) selected.delete(id);
+  updateSelectionBar();
 
   if (list.length === 0) {
     grid.hidden = true; grid.innerHTML = '';
@@ -120,7 +200,16 @@ export function renderGrid() {
     if (st === 'read') cover.appendChild(el('div', 'book-badge book-badge--read', 'Read'));
     else if (st === 'reading' && pct > 0) cover.appendChild(el('div', 'book-badge book-badge--reading', pct + '%'));
 
-    cover.onclick = () => openReader(book.id);
+    if (selectMode && selected.has(book.id)) card.classList.add('book-card--selected');
+    const toggleSelected = () => {
+      if (selected.has(book.id)) selected.delete(book.id); else selected.add(book.id);
+      card.classList.toggle('book-card--selected', selected.has(book.id));
+      updateSelectionBar();
+    };
+    cover.onclick = () => {
+      if (!selectMode) { openReader(book.id); return; }
+      toggleSelected();
+    };
 
     const meta = el('div', 'book-meta');
     meta.appendChild(el('p', 'book-title', escapeHtml(book.title)));
@@ -128,15 +217,37 @@ export function renderGrid() {
     if (book.rating > 0) {
       meta.appendChild(el('p', 'book-stars', '★'.repeat(book.rating) + '<span class="book-stars__off">' + '★'.repeat(5 - book.rating) + '</span>'));
     }
-    meta.onclick = () => openMetadataModal({ mode: 'edit', book });
+    meta.onclick = () => {
+      if (selectMode) { toggleSelected(); return; }
+      openMetadataModal({ mode: 'edit', book });
+    };
+
+    const menuBtn = el('button', 'book-card__menu-btn', '⋮');
+    menuBtn.type = 'button';
+    menuBtn.setAttribute('aria-label', 'Book options');
+    menuBtn.onclick = (ev) => { ev.stopPropagation(); openCardMenu(book, menuBtn); };
 
     card.appendChild(cover);
     card.appendChild(meta);
+    card.appendChild(menuBtn);
     grid.appendChild(card);
   });
 }
 
+// Legacy books have no hash: compute it lazily the first time we need to compare.
+async function findBookByHash(hash) {
+  for (const b of await DB.all()) {
+    if (!b.hash && b.fileBlob) { b.hash = await hashBlob(b.fileBlob); await DB.put(b); }
+    if (b.hash === hash) return b;
+  }
+  return null;
+}
+
 export async function addBookFromFile(file) {
+  await flushPendingDeletes(); // a just-deleted copy must really be gone before the duplicate check
+  const hash = await hashBlob(file);
+  const existing = await findBookByHash(hash);
+  if (existing) { showToast('Already in library: ' + existing.title, 3500); return; }
   showToast('Adding ' + file.name + '…', 4000);
   const buf = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
@@ -157,6 +268,7 @@ export async function addBookFromFile(file) {
     bookmarks: [],
     quotes: [],
     fileBlob: file,
+    hash,
   };
   await DB.put(book);
   await loadLibrary();
@@ -187,6 +299,34 @@ function renderSidebarShelves() {
 }
 
 export function initLibrary() {
+  window.addEventListener('pagehide', flushPendingDeletes);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingDeletes();
+  });
+
+  for (const id of ['#select-mode-btn', '#sidebar-select-btn']) {
+    const b = $(id); if (b) b.addEventListener('click', () => setSelectMode(!selectMode));
+  }
+  $('#selection-cancel').addEventListener('click', () => setSelectMode(false));
+  $('#selection-delete').addEventListener('click', () => {
+    const ids = [...selected];
+    setSelectMode(false);
+    deleteBooksWithUndo(ids);
+  });
+
+  $('#card-menu').addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (!action || !cardMenuBook) return;
+    $('#card-menu').hidden = true;
+    if (action === 'edit') openMetadataModal({ mode: 'edit', book: cardMenuBook });
+    if (action === 'delete') deleteBooksWithUndo([cardMenuBook.id]);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    const m = $('#card-menu');
+    if (!m.hidden && !m.contains(e.target) && !e.target.closest('.book-card__menu-btn')) m.hidden = true;
+  }, true);
+  window.addEventListener('scroll', () => { $('#card-menu').hidden = true; }, true);
+
   $('#sort-select').addEventListener('change', (e) => {
     state.sortBy = e.target.value;
     renderGrid();
@@ -292,4 +432,6 @@ export function initLibrary() {
       localStorage.setItem(KEY, collapsed ? '1' : '0');
     });
   })();
+
+  requestPersistence().then(refreshStorageInfo);
 }

@@ -45,12 +45,9 @@ test('bookmark toggles and shows in side panel', async ({ page }) => {
 
 test('back to library and delete via edit modal', async ({ page }) => {
   await addBook(page, fixture);
-  page.on('dialog', (d) => d.accept());
   await page.locator('.book-card .book-meta').first().click();
   await expect(page.locator('#metadata-modal')).toBeVisible();
-  // Known app quirk: app.js appends #meta-delete to the FIRST .modal__card (the library menu), so it is
-  // not visible inside the edit modal. Trigger its handler directly to characterize the delete behaviour.
-  await page.evaluate(() => document.getElementById('meta-delete').click());
+  await page.click('#meta-delete');
   await expect(page.locator('.book-card')).toHaveCount(0);
 });
 
