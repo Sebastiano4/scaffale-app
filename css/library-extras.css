@@ -1,3 +1,22 @@
 /* Library-view additions (data safety & library management). */
 
 .menu-info { font-size: 12px; opacity: 0.7; padding: 10px 16px 4px; line-height: 1.4; }
+
+/* ---- card ⋮ menu, undo toast ---- */
+.book-card__menu-btn {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 30px; height: 30px; border-radius: 50%; border: 0;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.card-menu {
+  position: fixed; z-index: 50; min-width: 150px; padding: 6px;
+  background: var(--bg-elevated-2); color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+}
+.card-menu[hidden] { display: none; }
+.card-menu button { text-align: left; padding: 10px 12px; border: 0; background: none; border-radius: 8px; cursor: pointer; font: inherit; color: inherit; }
+.card-menu button:hover { background: var(--bg-elevated); }
+.card-menu .card-menu__danger { color: #e5534b; }
+.toast__action { margin-left: 12px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }

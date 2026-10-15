@@ -16,8 +16,45 @@ async function refreshStorageInfo() {
   for (const id of ['#storage-info', '#sidebar-storage-info']) { const n = $(id); if (n) n.textContent = text; }
 }
 
+/* ---- undoable delete: books leave the view at once, the DB delete happens after UNDO_MS ---- */
+const UNDO_MS = 6000;
+let pending = null; // { ids: Set<string>, timer }
+
+export async function flushPendingDeletes() {
+  if (!pending) return;
+  const { ids, timer } = pending;
+  pending = null;
+  clearTimeout(timer);
+  for (const id of ids) { try { await DB.delete(id); } catch (e) { console.error(e); } }
+}
+
+export function deleteBooksWithUndo(ids) {
+  flushPendingDeletes();
+  const set = new Set(ids);
+  state.books = state.books.filter((b) => !set.has(b.id));
+  renderStatusBar(); renderCategoryBar(); renderGrid();
+  pending = { ids: set, timer: setTimeout(flushPendingDeletes, UNDO_MS) };
+  const msg = set.size === 1 ? 'Book deleted' : set.size + ' books deleted';
+  showToast(msg, UNDO_MS, {
+    label: 'Undo',
+    onClick: () => { clearTimeout(pending && pending.timer); pending = null; loadLibrary(); },
+  });
+}
+
+/* ---- ⋮ menu on each card ---- */
+let cardMenuBook = null;
+function openCardMenu(book, anchor) {
+  const menu = $('#card-menu');
+  cardMenuBook = book;
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = (r.bottom + 4) + 'px';
+  menu.style.left = Math.max(8, r.right - 150) + 'px';
+  menu.hidden = false;
+}
+
 export async function loadLibrary() {
   state.books = await DB.all();
+  if (pending) state.books = state.books.filter((b) => !pending.ids.has(b.id));
   renderStatusBar();
   renderCategoryBar();
   renderGrid();
@@ -138,8 +175,14 @@ export function renderGrid() {
     }
     meta.onclick = () => openMetadataModal({ mode: 'edit', book });
 
+    const menuBtn = el('button', 'book-card__menu-btn', '⋮');
+    menuBtn.type = 'button';
+    menuBtn.setAttribute('aria-label', 'Book options');
+    menuBtn.onclick = (ev) => { ev.stopPropagation(); openCardMenu(book, menuBtn); };
+
     card.appendChild(cover);
     card.appendChild(meta);
+    card.appendChild(menuBtn);
     grid.appendChild(card);
   });
 }
@@ -208,6 +251,24 @@ function renderSidebarShelves() {
 }
 
 export function initLibrary() {
+  window.addEventListener('pagehide', flushPendingDeletes);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingDeletes();
+  });
+
+  $('#card-menu').addEventListener('click', (e) => {
+    const action = e.target.closest('[data-action]')?.dataset.action;
+    if (!action || !cardMenuBook) return;
+    $('#card-menu').hidden = true;
+    if (action === 'edit') openMetadataModal({ mode: 'edit', book: cardMenuBook });
+    if (action === 'delete') deleteBooksWithUndo([cardMenuBook.id]);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    const m = $('#card-menu');
+    if (!m.hidden && !m.contains(e.target) && !e.target.closest('.book-card__menu-btn')) m.hidden = true;
+  }, true);
+  window.addEventListener('scroll', () => { $('#card-menu').hidden = true; }, true);
+
   $('#sort-select').addEventListener('change', (e) => {
     state.sortBy = e.target.value;
     renderGrid();
