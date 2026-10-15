@@ -5,6 +5,7 @@ import { DB } from './db.js';
 import { extractMetadata, renderThumbnail } from './metadata.js';
 import { openMetadataModal } from './metadata-modal.js';
 import { openReader } from './reader.js';
+import { hashBlob } from './hash.js';
 import { requestPersistence, storageInfo, formatStorageInfo } from './storage.js';
 
 /* ======================================================================
@@ -143,7 +144,19 @@ export function renderGrid() {
   });
 }
 
+// Legacy books have no hash: compute it lazily the first time we need to compare.
+async function findBookByHash(hash) {
+  for (const b of await DB.all()) {
+    if (!b.hash && b.fileBlob) { b.hash = await hashBlob(b.fileBlob); await DB.put(b); }
+    if (b.hash === hash) return b;
+  }
+  return null;
+}
+
 export async function addBookFromFile(file) {
+  const hash = await hashBlob(file);
+  const existing = await findBookByHash(hash);
+  if (existing) { showToast('Already in library: ' + existing.title, 3500); return; }
   showToast('Adding ' + file.name + '…', 4000);
   const buf = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
@@ -164,6 +177,7 @@ export async function addBookFromFile(file) {
     bookmarks: [],
     quotes: [],
     fileBlob: file,
+    hash,
   };
   await DB.put(book);
   await loadLibrary();
