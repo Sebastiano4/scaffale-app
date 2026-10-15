@@ -28,12 +28,23 @@ async function exportBackup() {
   if (books.length === 0) { showToast('The library is empty, nothing to export'); return; }
   showToast('Preparing the backup… this may take a moment', 6000);
   try {
-    const manifest = buildManifest(books, Stats.load(), Goal.load());
+    // a stored blob can become unreadable (iOS "WebKitBlobResource" error): skip that book, export the rest
+    const ok = [];
+    let unreadable = 0;
+    for (const b of books) {
+      if (b.fileBlob) {
+        try { await b.fileBlob.slice(0, 1).arrayBuffer(); } catch (e) { unreadable++; continue; }
+      }
+      ok.push(b);
+    }
+    if (ok.length === 0) { showToast("Backup failed: the books' files couldn't be read"); return; }
+    const manifest = buildManifest(ok, Stats.load(), Goal.load());
     const entries = [{ name: 'library.json', data: JSON.stringify(manifest) }];
-    for (const b of books) if (b.fileBlob) entries.push({ name: bookFilePath(b.id), data: b.fileBlob });
+    for (const b of ok) if (b.fileBlob) entries.push({ name: bookFilePath(b.id), data: b.fileBlob });
     const zip = await createZip(entries);
     download(zip, 'booknest-backup-' + new Date().toISOString().slice(0, 10) + '.zip');
-    showToast('Backup downloaded: ' + books.length + (books.length === 1 ? ' book' : ' books'));
+    showToast('Backup downloaded: ' + ok.length + (ok.length === 1 ? ' book' : ' books')
+      + (unreadable ? ' (' + unreadable + " couldn't be read)" : ''), unreadable ? 5000 : 2200);
   } catch (e) {
     console.error(e);
     showToast(/too large/.test(e.message) ? 'Library too large for a single backup (4 GB max)' : 'Error during backup');

@@ -38,3 +38,16 @@ test('legacy .json backup still imports', async ({ page }, testInfo) => {
   await page.setInputFiles('#import-input', p);
   await expect(page.locator('.book-card .book-title')).toHaveText('Legacy');
 });
+
+test('export skips a book whose file cannot be read', async ({ page }) => {
+  const { putRawBook } = await import('./helpers.mjs');
+  await freshApp(page);
+  await addBook(page, fixture);
+  await putRawBook(page, { id: 'broken1', title: 'Broken', author: 'X', numPages: 1, lastPage: 1, addedAt: 1, lastOpenedAt: 0, bookmarks: [], quotes: [], fileBlob: { notABlob: true } });
+  await page.reload();
+  await expect(page.locator('.book-card')).toHaveCount(2);
+  await openMenu(page);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#menu-export')]);
+  expect(download.suggestedFilename()).toMatch(/\.zip$/);
+  await expect(page.locator('#toast')).toContainText("Backup downloaded: 1 book (1 couldn't be read)");
+});

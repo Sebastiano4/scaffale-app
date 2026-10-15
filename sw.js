@@ -1,5 +1,5 @@
 /* Bump CACHE_NAME on every release, and list every file the app loads in APP_SHELL. */
-const CACHE_NAME = 'booknest-v13';
+const CACHE_NAME = 'booknest-v14';
 
 const APP_SHELL = [
   './',
@@ -44,7 +44,8 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
       Promise.all(
-        APP_SHELL.map((url) => cache.add(url).catch(() => {}))
+        // cache: 'reload' bypasses the HTTP cache (GitHub Pages: max-age=600) so a release never mixes old/new files
+        APP_SHELL.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => {}))
       )
     )
   );
@@ -88,11 +89,12 @@ self.addEventListener('fetch', (event) => {
   }
 
   // App code (html/css/js/json): network-first so updates apply immediately,
-  // falling back to cache when offline.
+  // falling back to cache when offline. 'no-cache' revalidates with the server, so the
+  // HTTP cache can't serve a stale module next to fresh ones right after a deploy.
   event.respondWith(
     caches.open(CACHE_NAME).then(async (cache) => {
       try {
-        const res = await fetch(req);
+        const res = await fetch(req, { cache: 'no-cache' });
         if (res && res.status === 200) cache.put(req, res.clone());
         return res;
       } catch (e) {

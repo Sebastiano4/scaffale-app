@@ -237,7 +237,16 @@ export function renderGrid() {
 // Legacy books have no hash: compute it lazily the first time we need to compare.
 async function findBookByHash(hash) {
   for (const b of await DB.all()) {
-    if (!b.hash && b.fileBlob) { b.hash = await hashBlob(b.fileBlob); await DB.put(b); }
+    if (!b.hash && b.fileBlob) {
+      try {
+        b.hash = await hashBlob(b.fileBlob);
+        // write onto the current record, not the stale snapshot (an edit may have been saved meanwhile)
+        const fresh = await DB.get(b.id);
+        if (fresh) { fresh.hash = b.hash; await DB.put(fresh); }
+      } catch (e) {
+        continue; // unreadable blob (e.g. iOS "WebKitBlobResource" error): skip, don't block adding
+      }
+    }
     if (b.hash === hash) return b;
   }
   return null;
@@ -245,10 +254,11 @@ async function findBookByHash(hash) {
 
 export async function addBookFromFile(file) {
   await flushPendingDeletes(); // a just-deleted copy must really be gone before the duplicate check
-  const hash = await hashBlob(file);
-  const existing = await findBookByHash(hash);
+  showToast('Adding ' + file.name + '…', 4000); // the first check after an upgrade hashes the whole library
+  // crypto.subtle only exists in secure contexts (https / localhost): over plain-HTTP LAN, skip dedupe
+  const hash = globalThis.crypto && crypto.subtle ? await hashBlob(file) : null;
+  const existing = hash && await findBookByHash(hash);
   if (existing) { showToast('Already in library: ' + existing.title, 3500); return; }
-  showToast('Adding ' + file.name + '…', 4000);
   const buf = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
   const { title, author } = await extractMetadata(pdfDoc, file.name);
