@@ -1,3 +1,8 @@
 
 # graphify generated output
 graphify-out/
+
+node_modules/
+test-results/
+playwright-report/
+tests/fixtures/out/

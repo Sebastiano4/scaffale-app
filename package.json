@@ -1,0 +1,13 @@
+{
+  "name": "booknest",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:unit": "node --test tests/unit/",
+    "test:e2e": "playwright test",
+    "test": "node --test tests/unit/ && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
