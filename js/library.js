@@ -5,15 +5,22 @@ import { DB } from './db.js';
 import { extractMetadata, renderThumbnail } from './metadata.js';
 import { openMetadataModal } from './metadata-modal.js';
 import { openReader } from './reader.js';
+import { requestPersistence, storageInfo, formatStorageInfo } from './storage.js';
 
 /* ======================================================================
    Library view
    ====================================================================== */
+async function refreshStorageInfo() {
+  const text = formatStorageInfo(await storageInfo());
+  for (const id of ['#storage-info', '#sidebar-storage-info']) { const n = $(id); if (n) n.textContent = text; }
+}
+
 export async function loadLibrary() {
   state.books = await DB.all();
   renderStatusBar();
   renderCategoryBar();
   renderGrid();
+  refreshStorageInfo();
 }
 
 export function renderStatusBar() {
@@ -292,4 +299,6 @@ export function initLibrary() {
       localStorage.setItem(KEY, collapsed ? '1' : '0');
     });
   })();
+
+  requestPersistence().then(refreshStorageInfo);
 }
