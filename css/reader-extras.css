@@ -20,3 +20,7 @@
 #selection-popover { display: flex; flex-wrap: nowrap; gap: 4px; max-width: calc(100vw - 24px); overflow-x: auto; }
 #selection-popover[hidden] { display: none; }
 #selection-popover button { flex: 0 0 auto; padding: 9px 12px; }
+
+/* ---- read aloud ---- */
+#read-aloud-btn[hidden] { display: none; }
+#read-aloud-btn[aria-pressed="true"] { color: var(--accent); }
