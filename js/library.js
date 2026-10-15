@@ -43,6 +43,23 @@ export function deleteBooksWithUndo(ids) {
 
 /* ---- ⋮ menu on each card ---- */
 let cardMenuBook = null;
+
+/* ---- select mode (batch delete) ---- */
+let selectMode = false;
+const selected = new Set();
+
+function setSelectMode(on) {
+  selectMode = on;
+  selected.clear();
+  $('#selection-bar').hidden = !on;
+  $('#library-view').classList.toggle('select-mode', on);
+  updateSelectionBar();
+  renderGrid();
+}
+function updateSelectionBar() {
+  $('#selection-count').textContent = selected.size + ' selected';
+  $('#selection-delete').disabled = selected.size === 0;
+}
 function openCardMenu(book, anchor) {
   const menu = $('#card-menu');
   cardMenuBook = book;
@@ -165,7 +182,16 @@ export function renderGrid() {
     if (st === 'read') cover.appendChild(el('div', 'book-badge book-badge--read', 'Read'));
     else if (st === 'reading' && pct > 0) cover.appendChild(el('div', 'book-badge book-badge--reading', pct + '%'));
 
-    cover.onclick = () => openReader(book.id);
+    if (selectMode && selected.has(book.id)) card.classList.add('book-card--selected');
+    const toggleSelected = () => {
+      if (selected.has(book.id)) selected.delete(book.id); else selected.add(book.id);
+      card.classList.toggle('book-card--selected', selected.has(book.id));
+      updateSelectionBar();
+    };
+    cover.onclick = () => {
+      if (!selectMode) { openReader(book.id); return; }
+      toggleSelected();
+    };
 
     const meta = el('div', 'book-meta');
     meta.appendChild(el('p', 'book-title', escapeHtml(book.title)));
@@ -173,7 +199,10 @@ export function renderGrid() {
     if (book.rating > 0) {
       meta.appendChild(el('p', 'book-stars', '★'.repeat(book.rating) + '<span class="book-stars__off">' + '★'.repeat(5 - book.rating) + '</span>'));
     }
-    meta.onclick = () => openMetadataModal({ mode: 'edit', book });
+    meta.onclick = () => {
+      if (selectMode) { toggleSelected(); return; }
+      openMetadataModal({ mode: 'edit', book });
+    };
 
     const menuBtn = el('button', 'book-card__menu-btn', '⋮');
     menuBtn.type = 'button';
@@ -254,6 +283,16 @@ export function initLibrary() {
   window.addEventListener('pagehide', flushPendingDeletes);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushPendingDeletes();
+  });
+
+  for (const id of ['#select-mode-btn', '#sidebar-select-btn']) {
+    const b = $(id); if (b) b.addEventListener('click', () => setSelectMode(!selectMode));
+  }
+  $('#selection-cancel').addEventListener('click', () => setSelectMode(false));
+  $('#selection-delete').addEventListener('click', () => {
+    const ids = [...selected];
+    setSelectMode(false);
+    deleteBooksWithUndo(ids);
   });
 
   $('#card-menu').addEventListener('click', (e) => {
