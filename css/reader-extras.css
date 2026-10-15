@@ -17,9 +17,11 @@
 .search-result__text mark { background: #f5d76e; color: #111; border-radius: 3px; padding: 0 2px; }
 
 /* ---- selection popover: 5 actions ---- */
-#selection-popover { display: flex; flex-wrap: nowrap; gap: 4px; max-width: calc(100vw - 24px); overflow-x: auto; }
+#selection-popover { display: flex; flex-wrap: nowrap; gap: 3px; max-width: calc(100vw - 24px); overflow-x: auto; scrollbar-width: none; }
+#selection-popover::-webkit-scrollbar { display: none; }
 #selection-popover[hidden] { display: none; }
-#selection-popover button { flex: 0 0 auto; padding: 9px 12px; }
+#selection-popover button { flex: 0 0 auto; padding: 8px 9px; font-size: 12px; }
+@media (min-width: 560px) { #selection-popover button { padding: 9px 12px; font-size: 13px; } }
 
 /* ---- read aloud ---- */
 #read-aloud-btn[hidden] { display: none; }
