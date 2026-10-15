@@ -4,7 +4,7 @@ import { $, el, showToast } from './dom.js';
 import { DB } from './db.js';
 import { Stats, flushReadingTime } from './stats.js';
 import { loadLibrary } from './library.js';
-import { buildSearchIndex } from './reader-search.js';
+import { buildSearchIndex, resetSearchUI } from './reader-search.js';
 import { buildTextLayer, clearLiveSelection } from './reader-selection.js';
 
 /* ======================================================================
@@ -61,7 +61,7 @@ export async function closeReader() {
   $('#reader-view').classList.remove('view--active');
   $('#library-view').classList.add('view--active');
   $('#side-panel').hidden = true;
-  $('#reader-search-bar').hidden = true;
+  resetSearchUI();
   $('#goto-popover').hidden = true;
   $('#appearance-popover').hidden = true;
   loadLibrary();

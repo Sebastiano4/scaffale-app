@@ -1,1 +1,17 @@
 /* Reader-view additions. */
+
+/* ---- search results list ---- */
+.search-progress { font-size: 12px; opacity: 0.7; padding: 4px 14px; }
+.search-progress[hidden], .search-results[hidden] { display: none; }
+.search-results {
+  max-height: 40vh; overflow-y: auto; display: flex; flex-direction: column;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+}
+.search-result {
+  display: flex; gap: 10px; align-items: baseline; text-align: left;
+  padding: 8px 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.search-result--active { background: var(--accent-soft); }
+.search-result__page { font-size: 12px; opacity: 0.65; white-space: nowrap; min-width: 40px; }
+.search-result__text { font-size: 14px; line-height: 1.35; }
+.search-result__text mark { background: #f5d76e; color: #111; border-radius: 3px; padding: 0 2px; }

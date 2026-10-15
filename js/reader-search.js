@@ -1,36 +1,81 @@
 import { state } from './state.js';
-import { $ } from './dom.js';
+import { $, el, escapeHtml } from './dom.js';
 import { renderSinglePage } from './reader.js';
+import { findOccurrences } from './search-core.js';
 
-/* ---- search within the book ---- */
+/* ---- search within the book: occurrence list with context ---- */
+let results = [];
+let pos = -1;
+
+function currentQuery() { return $('#reader-search-input').value.trim(); }
+
+function setProgress(done, total) {
+  const p = $('#search-progress');
+  if (done >= total) { p.hidden = true; return; }
+  p.hidden = false;
+  p.textContent = 'Indexing ' + done + '/' + total + '…';
+}
+
 export async function buildSearchIndex() {
   const { pdfDoc } = state.reader;
   if (!pdfDoc) return;
-  for (let n = 1; n <= pdfDoc.numPages; n++) {
-    if (state.reader.textIndex.has(n)) continue;
-    try {
-      const page = await pdfDoc.getPage(n);
-      const tc = await page.getTextContent();
-      state.reader.textIndex.set(n, tc.items.map((i) => i.str).join(' '));
-    } catch (e) { /* ignore */ }
+  const total = pdfDoc.numPages;
+  for (let n = 1; n <= total; n++) {
+    if (!state.reader.textIndex.has(n)) {
+      try {
+        const page = await pdfDoc.getPage(n);
+        const tc = await page.getTextContent();
+        state.reader.textIndex.set(n, tc.items.map((i) => i.str).join(' '));
+      } catch (e) { /* ignore */ }
+    }
     if (state.reader.pdfDoc !== pdfDoc) return; // reader closed / changed book meanwhile
+    if (n % 10 === 0 || n === total) setProgress(n, total);
   }
+  if (currentQuery()) runSearch();
 }
 
-let searchMatches = [];
-let searchMatchPos = -1;
+function renderResults() {
+  const list = $('#search-results');
+  list.innerHTML = '';
+  list.hidden = results.length === 0;
+  results.forEach((r, i) => {
+    const item = el('button', 'search-result' + (i === pos ? ' search-result--active' : ''));
+    item.type = 'button';
+    item.appendChild(el('span', 'search-result__page', 'p. ' + r.page));
+    item.appendChild(el('span', 'search-result__text',
+      escapeHtml(r.before) + '<mark>' + escapeHtml(r.match) + '</mark>' + escapeHtml(r.after)));
+    item.onclick = () => { pos = i; showCurrent(); };
+    list.appendChild(item);
+  });
+}
 
-async function jumpToSearchMatch(q) {
-  const page = searchMatches[searchMatchPos];
-  if (!page) return;
+function updateCount() {
+  $('#reader-search-count').textContent = results.length ? (pos + 1) + '/' + results.length : 'no results';
+}
+
+function runSearch() {
+  const q = currentQuery();
+  if (!q) { results = []; pos = -1; $('#reader-search-count').textContent = ''; renderResults(); return; }
+  results = findOccurrences(state.reader.textIndex, q);
+  pos = results.length ? 0 : -1;
+  updateCount();
+  renderResults();
+}
+
+async function showCurrent() {
+  const r = results[pos];
+  if (!r) return;
+  updateCount();
+  $('#search-results').querySelectorAll('.search-result').forEach((n, i) => n.classList.toggle('search-result--active', i === pos));
+  const q = currentQuery().toLowerCase();
   if (state.reader.mode === 'paginated') {
-    await renderSinglePage(page);
-    highlightQueryOnPage(page, q);
+    await renderSinglePage(r.page);
+    highlightQueryOnPage(r.page, q);
   } else {
-    let wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
+    const wrap = document.querySelector(`.pdf-page-wrap[data-page="${r.page}"]`);
     if (wrap) {
       $('#pdf-scroll').scrollTo({ top: Math.max(0, wrap.offsetTop - 8), behavior: 'smooth' });
-      setTimeout(() => highlightQueryOnPage(page, q), 350);
+      setTimeout(() => highlightQueryOnPage(r.page, q), 350);
     }
   }
 }
@@ -44,41 +89,35 @@ function highlightQueryOnPage(page, q) {
   });
 }
 
+function step(d) {
+  if (!results.length) return;
+  pos = (pos + d + results.length) % results.length;
+  showCurrent();
+}
+
+function closeSearch() {
+  $('#reader-search-bar').hidden = true;
+  $('#reader-search-input').value = '';
+  results = []; pos = -1;
+  $('#reader-search-count').textContent = '';
+  renderResults();
+  $('#search-progress').hidden = true;
+}
+
+export function resetSearchUI() { closeSearch(); }
+
 export function initReaderSearch() {
   $('#reader-search-btn').addEventListener('click', () => {
     $('#reader-search-bar').hidden = false;
     $('#reader-search-input').focus();
+    const total = state.reader.pdfDoc ? state.reader.pdfDoc.numPages : 0;
+    setProgress(state.reader.textIndex.size, total);
   });
-  $('#reader-search-close').addEventListener('click', () => {
-    $('#reader-search-bar').hidden = true;
-    $('#reader-search-input').value = '';
-    searchMatches = []; searchMatchPos = -1;
-    $('#reader-search-count').textContent = '';
+  $('#reader-search-close').addEventListener('click', closeSearch);
+  $('#reader-search-input').addEventListener('input', runSearch);
+  $('#reader-search-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); showCurrent(); }
   });
-  $('#reader-search-input').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    if (!q) { searchMatches = []; $('#reader-search-count').textContent = ''; return; }
-    searchMatches = [];
-    for (const [page, text] of state.reader.textIndex.entries()) {
-      if (text.toLowerCase().includes(q)) searchMatches.push(page);
-    }
-    searchMatches.sort((a, b) => a - b);
-    searchMatchPos = searchMatches.length ? 0 : -1;
-    $('#reader-search-count').textContent = searchMatches.length
-      ? `${searchMatchPos + 1}/${searchMatches.length}`
-      : 'no results';
-    if (searchMatches.length) jumpToSearchMatch(q);
-  });
-  $('#reader-search-next').addEventListener('click', () => {
-    if (!searchMatches.length) return;
-    searchMatchPos = (searchMatchPos + 1) % searchMatches.length;
-    $('#reader-search-count').textContent = `${searchMatchPos + 1}/${searchMatches.length}`;
-    jumpToSearchMatch($('#reader-search-input').value.trim().toLowerCase());
-  });
-  $('#reader-search-prev').addEventListener('click', () => {
-    if (!searchMatches.length) return;
-    searchMatchPos = (searchMatchPos - 1 + searchMatches.length) % searchMatches.length;
-    $('#reader-search-count').textContent = `${searchMatchPos + 1}/${searchMatches.length}`;
-    jumpToSearchMatch($('#reader-search-input').value.trim().toLowerCase());
-  });
+  $('#reader-search-next').addEventListener('click', () => step(1));
+  $('#reader-search-prev').addEventListener('click', () => step(-1));
 }
