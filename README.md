@@ -5,7 +5,9 @@ I libri restano salvati **solo sul dispositivo** (nel browser), quindi funziona 
 
 ## Cosa contiene la cartella
 - `index.html`, `styles.css`, `app.js` — l'app
+- `js/`, `css/` — i moduli dell'app (libreria, lettore, backup, ricerca…)
 - `manifest.json`, `sw.js` — la rendono installabile e offline
+- `tests/`, `package.json`, `playwright.config.mjs` — test automatici (servono solo a chi sviluppa)
 - `vendor/` — la libreria pdf.js inclusa localmente (funziona offline fin dal primo avvio)
 - `icons/` — icona dell'app
 
@@ -15,7 +17,7 @@ Per motivi di sicurezza del browser, una PWA non si installa correttamente apren
 ## Pubblicarla gratis con GitHub Pages (10 minuti)
 1. Crea un account su [github.com](https://github.com) se non lo hai già.
 2. Crea un nuovo repository (pulsante verde "New"), dagli un nome tipo `booknest-app`, lascialo pubblico.
-3. Nella pagina del repository, clicca "Add file" → "Upload files" e trascina dentro **tutti i file di questa cartella** (index.html, styles.css, app.js, manifest.json, sw.js, e le cartelle icons e vendor con il loro contenuto). Poi "Commit changes".
+3. Nella pagina del repository, clicca "Add file" → "Upload files" e trascina dentro **tutti i file di questa cartella** (index.html, styles.css, app.js, manifest.json, sw.js, e le cartelle js, css, icons e vendor con il loro contenuto). Poi "Commit changes".
 3b. **Importante**: crea anche un file vuoto chiamato `.nojekyll` ("Add file" → "Create new file", scrivi `.nojekyll` come nome, lascia vuoto e committa). Senza questo file GitHub Pages ignora la cartella `vendor` e l'app resta bianca.
 4. Vai su **Settings → Pages** (menu a sinistra).
 5. In "Source" scegli il branch `main` e cartella `/ (root)`, salva.
@@ -31,14 +33,27 @@ Dopo l'installazione l'app si apre a schermo intero con la sua icona, come un'ap
 
 ## Come si usa
 - Tocca il **+** per aggiungere i tuoi PDF (puoi selezionarne più di uno insieme). Titolo e autore vengono riconosciuti automaticamente dai metadati del file o dal nome del file.
-- Tocca la copertina per **leggere**, tocca titolo/autore per **modificare i dati o eliminare** il libro.
-- Nel lettore: icona lente per **cercare nel testo**, icona segnalibro per segnare la pagina, icona righe per la lista di **segnalibri e citazioni**, icona pagine per passare tra scorrimento continuo e pagina singola.
-- Seleziona del testo mentre leggi per salvarlo come **citazione**: il testo resta anche **evidenziato** nel libro.
+- Se aggiungi un PDF che è già nella libreria, l'app lo riconosce e **non lo duplica**.
+- Tocca la copertina per **leggere**, tocca titolo/autore per **modificare i dati**.
+- Per **eliminare** un libro: tocca il pulsante **⋮** sulla copertina → **Delete** (oppure "Delete book" nella scheda del libro). Per qualche secondo compare **Undo** per annullare se hai sbagliato.
+- Per eliminarne **più di uno**: tocca l'icona di selezione nella barra della libreria, scegli i libri e premi **Delete** (anche qui puoi annullare).
+- Nel lettore: icona lente per **cercare nel testo** (compare l'elenco di tutti i risultati con la frase intorno: toccane uno per andarci), icona segnalibro per segnare la pagina, icona righe per la lista di **segnalibri e citazioni**, icona pagine per passare tra scorrimento continuo e pagina singola.
+- Il pulsante **▶** nel lettore **legge ad alta voce** la pagina e prosegue con le successive; toccalo di nuovo per fermarlo.
+- Seleziona del testo mentre leggi per salvarlo come **citazione** (il testo resta **evidenziato** nel libro), oppure per **copiarlo**, cercarne la **definizione**, **tradurlo** o **ascoltarlo**. Definizione e traduzione aprono un sito esterno, quindi serve la connessione.
 - Il pulsante rotondo in basso a destra nel lettore (mezzaluna) alterna i filtri **normale / seppia / notte**; sotto ci sono i controlli **zoom**.
 - Tocca la **barra di avanzamento** sotto il titolo per saltare a qualsiasi punto del libro; in modalità pagina singola puoi anche toccare i **bordi** dello schermo per voltare pagina.
 - Il nastrino colorato sopra ogni copertina mostra quanto hai letto del libro; il badge indica **Letto** o la percentuale.
 - Nella libreria: chip **Da leggere / In lettura / Letti** per filtrare, menù a tendina per **ordinare**, e il menu ⋮ in alto a destra per **backup/ripristino** della libreria e **statistiche di lettura** (pagine, tempo, giorni di fila).
+- Il **backup** è un file `.zip` con tutti i libri e i dati (puoi ancora importare i vecchi backup `.json`). Massimo 4 GB per backup.
+- Nello stesso menu vedi lo **spazio occupato** e se la libreria è **protetta**: l'app chiede al browser di non cancellare i tuoi libri quando lo spazio scarseggia. Fai comunque un backup ogni tanto, soprattutto su iPhone/iPad.
 - Lo stato di un libro si aggiorna da solo mentre leggi, ma puoi cambiarlo a mano toccando titolo/autore.
+
+## Sviluppo
+Servono [Node.js](https://nodejs.org) 20 o più recente. Nella cartella:
+- `npm install` — installa gli strumenti di test (solo la prima volta)
+- `npm test` — esegue i test unitari e i test nel browser (Playwright)
+
+Quando modifichi i file dell'app, aumenta il numero in `CACHE_NAME` dentro `sw.js` e aggiungi ad `APP_SHELL` gli eventuali nuovi file, così chi ha l'app installata riceve l'aggiornamento.
 
 ## Nota
 Il PDF viene aperto tramite la libreria open-source [pdf.js](https://mozilla.github.io/pdf.js/) di Mozilla, inclusa direttamente nella cartella `vendor/`: non serve alcuna connessione, nemmeno al primo avvio.

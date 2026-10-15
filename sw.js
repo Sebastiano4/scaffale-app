@@ -1,5 +1,5 @@
 /* Bump CACHE_NAME on every release, and list every file the app loads in APP_SHELL. */
-const CACHE_NAME = 'booknest-v12';
+const CACHE_NAME = 'booknest-v13';
 
 const APP_SHELL = [
   './',
@@ -23,6 +23,13 @@ const APP_SHELL = [
   './js/reader-selection.js',
   './js/reader-panel.js',
   './js/reader-search.js',
+  './js/storage.js',
+  './js/zip.js',
+  './js/hash.js',
+  './js/backup-format.js',
+  './js/search-core.js',
+  './js/speech.js',
+  './js/reader-tts.js',
   './manifest.json',
   './vendor/pdf.min.mjs',
   './vendor/pdf.worker.min.mjs',
