@@ -1,17 +1,11 @@
 import { $, showToast } from './dom.js';
 import { DB } from './db.js';
-import { Stats } from './stats.js';
+import { Stats, Goal } from './stats.js';
 import { loadLibrary } from './library.js';
+import { createZip, readZip } from './zip.js';
+import { buildManifest, bookFilePath, validateManifest, mergeStats } from './backup-format.js';
 
-/* ---- backup: export / import the whole library as JSON ---- */
-function blobToBase64(blob) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(String(r.result).split(',')[1] || '');
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(blob);
-  });
-}
+/* ---- backup: export / import the whole library as a .zip (legacy .json still imports) ---- */
 function base64ToBlob(b64) {
   const bin = atob(b64);
   const arr = new Uint8Array(bin.length);
@@ -19,33 +13,76 @@ function base64ToBlob(b64) {
   return new Blob([arr], { type: 'application/pdf' });
 }
 
-export function initBackup() {
-  $('#menu-export').addEventListener('click', async () => {
-    $('#library-menu').hidden = true;
-    const books = await DB.all();
-    if (books.length === 0) { showToast('The library is empty, nothing to export'); return; }
-    showToast('Preparing the backup… this may take a moment', 6000);
-    try {
-      const out = [];
-      for (const b of books) {
-        const { fileBlob, ...meta } = b;
-        out.push({ ...meta, fileB64: fileBlob ? await blobToBase64(fileBlob) : '' });
+function download(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+async function exportBackup() {
+  const books = await DB.all();
+  if (books.length === 0) { showToast('The library is empty, nothing to export'); return; }
+  showToast('Preparing the backup… this may take a moment', 6000);
+  try {
+    const manifest = buildManifest(books, Stats.load(), Goal.load());
+    const entries = [{ name: 'library.json', data: JSON.stringify(manifest) }];
+    for (const b of books) if (b.fileBlob) entries.push({ name: bookFilePath(b.id), data: b.fileBlob });
+    const zip = await createZip(entries);
+    download(zip, 'booknest-backup-' + new Date().toISOString().slice(0, 10) + '.zip');
+    showToast('Backup downloaded: ' + books.length + (books.length === 1 ? ' book' : ' books'));
+  } catch (e) {
+    console.error(e);
+    showToast('Error during backup');
+  }
+}
+
+async function importBackup(file) {
+  showToast('Importing the backup…', 6000);
+  try {
+    let count = 0;
+    let stats = null;
+    const isZip = /\.zip$/i.test(file.name) || file.type === 'application/zip';
+    if (isZip) {
+      const files = await readZip(file);
+      const lib = files.get('library.json');
+      if (!lib) throw new Error('invalid backup');
+      const data = JSON.parse(await lib.text());
+      validateManifest(data);
+      for (const { file: path, ...meta } of data.books) {
+        const pdf = files.get(path);
+        if (!pdf) continue;
+        await DB.put({ ...meta, fileBlob: new Blob([pdf], { type: 'application/pdf' }) });
+        count++;
       }
-      const payload = JSON.stringify({ app: 'BookNest', version: 1, exportedAt: Date.now(), stats: Stats.load(), books: out });
-      const blob = new Blob([payload], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      const d = new Date();
-      a.download = 'booknest-backup-' + d.toISOString().slice(0, 10) + '.json';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-      showToast('Backup downloaded: ' + out.length + (out.length === 1 ? ' book' : ' books'));
-    } catch (e) {
-      console.error(e);
-      showToast('Error during backup');
+      stats = data.stats;
+      if (data.goal && !Goal.load()) Goal.save(data.goal);
+    } else {
+      const data = JSON.parse(await file.text());
+      validateManifest(data);
+      for (const { fileB64, ...meta } of data.books) {
+        if (!fileB64) continue;
+        await DB.put({ ...meta, fileBlob: base64ToBlob(fileB64) });
+        count++;
+      }
+      stats = data.stats;
     }
+    if (stats && stats.days) Stats.save(mergeStats(Stats.load(), stats));
+    await loadLibrary();
+    showToast('Imported ' + count + (count === 1 ? ' book' : ' books'));
+  } catch (err) {
+    console.error(err);
+    showToast('Invalid backup file');
+  }
+}
+
+export function initBackup() {
+  $('#menu-export').addEventListener('click', () => {
+    $('#library-menu').hidden = true;
+    exportBackup();
   });
 
   $('#menu-import').addEventListener('click', () => {
@@ -56,31 +93,6 @@ export function initBackup() {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    showToast('Importing the backup…', 6000);
-    try {
-      const data = JSON.parse(await file.text());
-      if (!data || data.app !== 'BookNest' || !Array.isArray(data.books)) throw new Error('invalid format');
-      let count = 0;
-      for (const entry of data.books) {
-        const { fileB64, ...meta } = entry;
-        if (!fileB64) continue;
-        await DB.put({ ...meta, fileBlob: base64ToBlob(fileB64) });
-        count++;
-      }
-      if (data.stats && data.stats.days) {
-        // merge stats, keeping the larger value per day
-        const cur = Stats.load();
-        for (const [k, v] of Object.entries(data.stats.days)) {
-          const c = cur.days[k] || { pages: 0, seconds: 0 };
-          cur.days[k] = { pages: Math.max(c.pages, v.pages || 0), seconds: Math.max(c.seconds, v.seconds || 0) };
-        }
-        Stats.save(cur);
-      }
-      await loadLibrary();
-      showToast('Imported ' + count + (count === 1 ? ' book' : ' books'));
-    } catch (err) {
-      console.error(err);
-      showToast('Invalid backup file');
-    }
+    await importBackup(file);
   });
 }
