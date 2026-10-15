@@ -4,7 +4,7 @@ import { $, el, uid, showToast, escapeHtml } from './dom.js';
 import { DB } from './db.js';
 import { extractMetadata, renderThumbnail } from './metadata.js';
 import { openMetadataModal } from './metadata-modal.js';
-import { openReader } from '../app.js';
+import { openReader } from './reader.js';
 
 /* ======================================================================
    Library view

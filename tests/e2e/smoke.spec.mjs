@@ -85,3 +85,23 @@ test('no console errors during a normal session', async ({ page }) => {
   await expect(page.locator('#library-view')).toHaveClass(/view--active/);
   expect(errors).toEqual([]);
 });
+
+test('every js module listed in sw.js APP_SHELL exists', async ({ request }) => {
+  const sw = await (await request.get('sw.js')).text();
+  const paths = [...sw.matchAll(/'\.\/([^']+)'/g)].map((m) => m[1]).filter(Boolean);
+  for (const p of paths) {
+    const r = await request.get(p);
+    expect(r.status(), p).toBe(200);
+  }
+});
+
+test('paginated mode: next page and outline tab work', async ({ page }) => {
+  await addBook(page, fixture);
+  await openFirstBook(page);
+  await page.click('#mode-toggle');
+  await page.click('#next-page');
+  await expect(page.locator('#reader-progress')).toHaveText('Page 2 of 3');
+  await page.click('#panel-btn');
+  await page.click('.side-panel__tab[data-tab="outline"]');
+  await expect(page.locator('#outline-list')).toContainText('no table of contents');
+});
