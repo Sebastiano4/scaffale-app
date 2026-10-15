@@ -30,3 +30,19 @@ test('no results message', async ({ page }) => {
   await expect(page.locator('#reader-search-count')).toHaveText('no results');
   await expect(page.locator('#search-results .search-result')).toHaveCount(0);
 });
+
+test('indexing progress stays hidden while the search bar is closed', async ({ page }) => {
+  const pages = Array.from({ length: 25 }, (_, i) => ['Page number ' + (i + 1), 'filler text']);
+  const long = writeFixture('long.pdf', pages, { title: 'Long Book', author: 'Test Author' });
+  await freshApp(page);
+  await addBook(page, long);
+  await openFirstBook(page);
+  const seen = await page.evaluate(() => new Promise((res) => {
+    let visible = false;
+    const p = document.querySelector('#search-progress');
+    const t = setInterval(() => { if (!p.hidden) visible = true; }, 5);
+    setTimeout(() => { clearInterval(t); res(visible); }, 1500);
+  }));
+  expect(seen).toBe(false);
+  await expect(page.locator('#reader-search-bar')).toBeHidden();
+});

@@ -6,6 +6,7 @@ import { speak, stopSpeaking, speechSupported } from './speech.js';
 const PLAY = '<path d="M8 5v14l11-7z" fill="currentColor"/>';
 const PAUSE = '<path d="M7 5h4v14H7zm6 0h4v14h-4z" fill="currentColor"/>';
 let playing = false;
+let session = 0; // generation token: callbacks from a previous play session are ignored
 
 function setPlaying(on) {
   playing = on;
@@ -24,18 +25,22 @@ async function pageText(n) {
   return text;
 }
 
-async function readFrom(n) {
+async function readFrom(n, gen) {
   const r = state.reader;
-  if (!playing || !r.pdfDoc) return;
+  if (gen !== session || !playing || !r.pdfDoc) return;
   if (n > r.pdfDoc.numPages) { setPlaying(false); return; }
   if (n !== r.currentPage) goToPage(n);
   const text = (await pageText(n)).trim();
-  if (!playing) return;
-  if (!text) { readFrom(n + 1); return; }
-  speak(text, { onend: () => { if (playing) readFrom(n + 1); } });
+  if (gen !== session || !playing) return;
+  if (!text) { readFrom(n + 1, gen); return; }
+  speak(text, {
+    onend: () => { if (gen === session && playing) readFrom(n + 1, gen); },
+    onerror: () => { if (gen === session) stopReadAloud(); },
+  });
 }
 
 export function stopReadAloud() {
+  session++;
   if (!playing) return;
   setPlaying(false);
   stopSpeaking();
@@ -47,7 +52,8 @@ export function initReaderTts() {
   btn.hidden = !speechSupported;
   btn.addEventListener('click', () => {
     if (playing) { stopReadAloud(); return; }
+    const gen = ++session;
     setPlaying(true);
-    readFrom(state.reader.currentPage);
+    readFrom(state.reader.currentPage, gen);
   });
 }

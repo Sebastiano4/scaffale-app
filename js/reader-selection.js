@@ -4,6 +4,7 @@ import { $, el, uid, showToast } from './dom.js';
 import { DB } from './db.js';
 import { renderSidePanel } from './reader-panel.js';
 import { speak, speechSupported } from './speech.js';
+import { stopReadAloud } from './reader-tts.js';
 
 /* ---- text layer (selection + search highlighting) via pdf.js's official TextLayer ---- */
 export async function buildTextLayer(wrap, textContent, viewport) {
@@ -233,6 +234,7 @@ export function initReaderSelection() {
     dismissSelection();
   });
   $('#sel-speak-btn').addEventListener('click', () => {
+    stopReadAloud();
     speak(popoverText());
     dismissSelection();
   });

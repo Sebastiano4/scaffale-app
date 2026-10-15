@@ -12,6 +12,7 @@ function currentQuery() { return $('#reader-search-input').value.trim(); }
 function setProgress(done, total) {
   const p = $('#search-progress');
   if (done >= total) { p.hidden = true; return; }
+  if ($('#reader-search-bar').hidden) { p.hidden = true; return; }
   p.hidden = false;
   p.textContent = 'Indexing ' + done + '/' + total + '…';
 }
@@ -19,13 +20,15 @@ function setProgress(done, total) {
 export async function buildSearchIndex() {
   const { pdfDoc } = state.reader;
   if (!pdfDoc) return;
+  const index = state.reader.textIndex; // this book's Map, never a later book's
   const total = pdfDoc.numPages;
   for (let n = 1; n <= total; n++) {
-    if (!state.reader.textIndex.has(n)) {
+    if (!index.has(n)) {
       try {
         const page = await pdfDoc.getPage(n);
         const tc = await page.getTextContent();
-        state.reader.textIndex.set(n, tc.items.map((i) => i.str).join(' '));
+        if (state.reader.pdfDoc !== pdfDoc) return;
+        index.set(n, tc.items.map((i) => i.str).join(' '));
       } catch (e) { /* ignore */ }
     }
     if (state.reader.pdfDoc !== pdfDoc) return; // reader closed / changed book meanwhile
