@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { $, el, uid, showToast } from './dom.js';
 import { DB } from './db.js';
 import { renderSidePanel } from './reader-panel.js';
+import { speak, speechSupported } from './speech.js';
 
 /* ---- text layer (selection + search highlighting) via pdf.js's official TextLayer ---- */
 export async function buildTextLayer(wrap, textContent, viewport) {
@@ -206,5 +207,33 @@ export function initReaderSelection() {
     refreshQuoteHighlights(page);
     showToast('Quote saved and highlighted');
     if (!$('#side-panel').hidden) renderSidePanel();
+  });
+
+  /* ---- extra actions on the selected text ---- */
+  const popoverText = () => $('#selection-popover').dataset.text || '';
+  const dismissSelection = () => {
+    $('#selection-popover').hidden = true;
+    window.getSelection().removeAllRanges();
+    clearLiveSelection();
+  };
+  $('#sel-speak-btn').hidden = !speechSupported;
+  $('#sel-copy-btn').addEventListener('click', async () => {
+    const t = popoverText();
+    try { await navigator.clipboard.writeText(t); showToast('Copied'); }
+    catch (e) { showToast("Couldn't copy"); }
+    dismissSelection();
+  });
+  $('#sel-define-btn').addEventListener('click', () => {
+    window.open('https://en.wiktionary.org/wiki/Special:Search?search=' + encodeURIComponent(popoverText()), '_blank', 'noopener');
+    dismissSelection();
+  });
+  $('#sel-translate-btn').addEventListener('click', () => {
+    const tl = (navigator.language || 'en').slice(0, 2).toLowerCase();
+    window.open('https://translate.google.com/?sl=auto&tl=' + tl + '&text=' + encodeURIComponent(popoverText()) + '&op=translate', '_blank', 'noopener');
+    dismissSelection();
+  });
+  $('#sel-speak-btn').addEventListener('click', () => {
+    speak(popoverText());
+    dismissSelection();
   });
 }

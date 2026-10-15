@@ -15,3 +15,8 @@
 .search-result__page { font-size: 12px; opacity: 0.65; white-space: nowrap; min-width: 40px; }
 .search-result__text { font-size: 14px; line-height: 1.35; }
 .search-result__text mark { background: #f5d76e; color: #111; border-radius: 3px; padding: 0 2px; }
+
+/* ---- selection popover: 5 actions ---- */
+#selection-popover { display: flex; flex-wrap: nowrap; gap: 4px; max-width: calc(100vw - 24px); overflow-x: auto; }
+#selection-popover[hidden] { display: none; }
+#selection-popover button { flex: 0 0 auto; padding: 9px 12px; }
