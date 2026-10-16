@@ -15,6 +15,19 @@ function paintStars(rating) {
   $('#meta-rating').setAttribute('aria-label', 'Rating: ' + ratingLabel(rating));
 }
 
+/* The review box grows with its text (from its 4 rows up to half the screen, then scrolls inside). */
+const REVIEW_MAX_SCREEN = 0.5;
+function fitReview() {
+  const ta = $('#meta-review');
+  if (!ta || ta.offsetParent === null) return;
+  ta.style.height = 'auto';
+  const border = ta.offsetHeight - ta.clientHeight;
+  const max = Math.round(window.innerHeight * REVIEW_MAX_SCREEN);
+  const h = Math.min(ta.scrollHeight + border, max);
+  ta.style.height = h + 'px';
+  ta.style.overflowY = ta.scrollHeight + border > max ? 'auto' : 'hidden';
+}
+
 export function openMetadataModal({ mode, book }) {
   modalCtx = { mode, book, rating: normalizeRating(book.rating) };
   $('#metadata-modal-title').textContent = mode === 'edit' ? 'Edit book' : 'Confirm the book details';
@@ -36,6 +49,8 @@ export function openMetadataModal({ mode, book }) {
     dates.hidden = true;
   }
   $('#metadata-modal').hidden = false;
+  $('#metadata-modal .modal__card').scrollTop = 0;
+  fitReview(); // only measurable once the modal is visible
 
   let delBtn = document.getElementById('meta-delete');
   if (mode === 'edit') {
@@ -58,6 +73,8 @@ export function openMetadataModal({ mode, book }) {
 
 export function initMetadataModal() {
   $('#meta-cancel').addEventListener('click', () => { $('#metadata-modal').hidden = true; });
+  $('#meta-review').addEventListener('input', fitReview);
+  window.addEventListener('resize', fitReview);
 
   // star rating interaction
   document.querySelectorAll('#meta-rating .star').forEach((star) => {

@@ -670,6 +670,10 @@ button { font-family: inherit; }
 }
 .field textarea { resize: vertical; line-height: 1.4; }
 .field textarea:focus { border-color: var(--accent); }
+/* review: easier to read; the box grows with the text (js/metadata-modal.js) */
+#meta-review { font-size: 15.5px; line-height: 1.55; resize: none; }
+/* the book editor scrolls as a whole when it is taller than the screen */
+#metadata-modal .modal__card { max-height: 94vh; overflow-y: auto; overscroll-behavior: contain; }
 
 /* star rating */
 .star-rating { display: flex; align-items: center; gap: 4px; }
