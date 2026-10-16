@@ -40,6 +40,13 @@ function bookInfo(pdfDoc, startPage) {
   return p;
 }
 
+/* The open book's language ('it', 'en', …) or null — the same guess the voices use. */
+export async function currentBookLanguage() {
+  const pdfDoc = state.reader.pdfDoc;
+  if (!pdfDoc) return null;
+  try { return (await bookInfo(pdfDoc, state.reader.currentPage || 1)).lang; } catch (e) { return null; }
+}
+
 /* ---- sentence highlight on the text layer ---- */
 const normChars = (s) => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 let hlPage = 0;

@@ -11,13 +11,14 @@ import { buildTextLayer, clearLiveSelection } from './reader-selection.js';
 /* ======================================================================
    Reader
    ====================================================================== */
-export async function openReader(id) {
+/* opts.page opens the book at that page instead of where it was left (Dictionary references). */
+export async function openReader(id, opts = {}) {
   const book = await DB.get(id);
   if (!book) return;
 
   state.reader.book = book;
   state.reader.mode = book.readingMode || 'continuous';
-  state.reader.currentPage = book.lastPage || 1;
+  state.reader.currentPage = Math.max(1, Number(opts.page) || book.lastPage || 1);
   state.reader.openedAtPage = state.reader.currentPage;
   state.reader.textIndex = new Map();
   state.reader.outline = undefined;
@@ -67,6 +68,7 @@ export async function closeReader() {
   $('#reader-view').classList.remove('view--active');
   $('#library-view').classList.add('view--active');
   $('#side-panel').hidden = true;
+  $('#word-card').hidden = true;
   resetSearchUI();
   $('#goto-popover').hidden = true;
   $('#appearance-popover').hidden = true;

@@ -40,14 +40,11 @@ test('copy puts the selection on the clipboard', async ({ page }) => {
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('brown');
 });
 
-test('define and translate open the right URLs', async ({ page }) => {
-  await selectWord(page, 'brown');
-  await page.click('#sel-define-btn');
+test('translate opens the right URL', async ({ page }) => {
   await selectWord(page, 'brown');
   await page.click('#sel-translate-btn');
   const opened = await page.evaluate(() => window.__opened);
-  expect(opened[0]).toBe('https://en.wiktionary.org/wiki/Special:Search?search=brown');
-  expect(opened[1]).toMatch(/^https:\/\/translate\.google\.com\/\?sl=auto&tl=[a-z]{2}&text=brown&op=translate$/);
+  expect(opened[0]).toMatch(/^https:\/\/translate\.google\.com\/\?sl=auto&tl=[a-z]{2}&text=brown&op=translate$/);
 });
 
 test('speak reads the selection', async ({ page }) => {

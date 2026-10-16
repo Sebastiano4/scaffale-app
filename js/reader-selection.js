@@ -5,6 +5,9 @@ import { DB } from './db.js';
 import { renderSidePanel } from './reader-panel.js';
 import { speak, speechSupported } from './speech.js';
 import { stopReadAloud } from './reader-tts.js';
+import { isDictionarySelection } from './dictionary-core.js';
+import { saveWordFromSelection } from './dictionary-view.js';
+import { sentenceAround } from './reader-touch-select.js';
 
 /* ---- text layer (selection + search highlighting) via pdf.js's official TextLayer ---- */
 export async function buildTextLayer(wrap, textContent, viewport) {
@@ -230,6 +233,9 @@ export function initReaderSelection() {
       popover.style.top = (rect.top - base.top) + 'px';
     }
     popover.dataset.text = text;
+    $('#sel-dict-btn').hidden = !isDictionarySelection(text);
+    popover._selRect = rect;
+    popover._range = range.cloneRange();
     const wrap = anchorNode.closest('.pdf-page-wrap');
     popover.dataset.page = wrap ? wrap.dataset.page : state.reader.currentPage;
     // stash normalized selection rectangles for a precise, zoom-stable highlight
@@ -269,9 +275,16 @@ export function initReaderSelection() {
     catch (e) { showToast("Couldn't copy"); }
     dismissSelection();
   });
-  $('#sel-define-btn').addEventListener('click', () => {
-    window.open('https://en.wiktionary.org/wiki/Special:Search?search=' + encodeURIComponent(popoverText()), '_blank', 'noopener');
+  $('#sel-dict-btn').addEventListener('click', () => {
+    const popover = $('#selection-popover');
+    const word = {
+      text: popoverText(),
+      page: Number(popover.dataset.page) || state.reader.currentPage,
+      sentence: popover._range ? sentenceAround(popover._range) : '',
+      rect: popover._selRect,
+    };
     dismissSelection();
+    saveWordFromSelection(word);
   });
   $('#sel-translate-btn').addEventListener('click', () => {
     const tl = (navigator.language || 'en').slice(0, 2).toLowerCase();

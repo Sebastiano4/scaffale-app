@@ -3,6 +3,7 @@ import { $, el, uid, showToast, escapeHtml } from './dom.js';
 import { DB } from './db.js';
 import { updateProgressUI, goToPage } from './reader.js';
 import { refreshQuoteHighlights } from './reader-selection.js';
+import { renderWordsList } from './dictionary-view.js';
 
 export function renderSidePanel() {
   const book = state.reader.book;
@@ -86,6 +87,8 @@ export function renderSidePanel() {
     item.appendChild(actions);
     qList.appendChild(item);
   });
+
+  renderWordsList($('#words-list'), book);
 }
 
 /* ---- export a book's quotes + notes as a Markdown file ---- */
@@ -185,6 +188,7 @@ export function initReaderPanel() {
       const which = tab.dataset.tab;
       $('#bookmarks-list').hidden = which !== 'bookmarks';
       $('#quotes-list').hidden = which !== 'quotes';
+      $('#words-list').hidden = which !== 'words';
       $('#outline-list').hidden = which !== 'outline';
       if (which === 'outline') renderOutline();
     });

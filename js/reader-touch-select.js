@@ -115,6 +115,17 @@ function sentenceRangeAt(x, y) {
   return r;
 }
 
+/* The sentence around the start of a selection, as plain text (for dictionary contexts). */
+export function sentenceAround(range) {
+  const layer = textLayerOf(range.startContainer);
+  if (!layer) return '';
+  const model = layerModel(layer);
+  const seg = model.segs.find((s) => s.node === range.startContainer);
+  if (!seg) return '';
+  const { start, end } = sentenceBounds(model.text, seg.start + range.startOffset);
+  return model.text.slice(start, end).replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+
 function applyRange(r) {
   const sel = window.getSelection();
   sel.removeAllRanges();

@@ -10,6 +10,7 @@ import { initReaderPanel } from './js/reader-panel.js';
 import { initReaderSearch } from './js/reader-search.js';
 import { initTouchSelect } from './js/reader-touch-select.js';
 import { initImmersive } from './js/immersive.js';
+import { initDictionary } from './js/dictionary-view.js';
 
 initTheme();
 initReadingTimeTracking();
@@ -23,6 +24,7 @@ initReaderPanel();
 initReaderSearch();
 initTouchSelect();
 initImmersive();
+initDictionary();
 loadLibrary();
 
 if ('serviceWorker' in navigator) {

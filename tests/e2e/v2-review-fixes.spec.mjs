@@ -46,6 +46,8 @@ test.beforeEach(async ({ page }) => {
 test('paginated: a long-press that slides sideways does not turn the page; a quick swipe still does', async ({ page }) => {
   await page.click('#mode-toggle');
   await expect(page.locator('.pdf-page-wrap')).toHaveCount(1);
+  // the single page's text layer is built after the wrap appears
+  await expect(page.locator('.textLayer span', { hasText: 'lazy' })).toBeVisible();
   await gesture(page, await wordCenter(page, 'lazy'), { holdMs: 650, dx: -150 });
   await page.waitForTimeout(300);
   await expect(page.locator('#reader-progress')).toHaveText('Page 1 of 3');
