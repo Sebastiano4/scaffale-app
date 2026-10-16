@@ -23,6 +23,9 @@ export async function openReader(id) {
 
   $('#library-view').classList.remove('view--active');
   $('#reader-view').classList.add('view--active');
+  // a library "Undo" toast belongs to the library: don't carry it into the book
+  const toast = $('#toast');
+  if (toast.querySelector('.toast__action')) toast.hidden = true;
   $('#reader-title').textContent = book.title;
   $('#reader-loading').hidden = false;
   updateModeIcon();

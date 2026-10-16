@@ -19,6 +19,24 @@ test('toasts are visible inside the reader (e.g. after saving a quote)', async (
   await expect(page.locator('#toast')).toContainText('Quote saved');
 });
 
+test('the selectable text layer has the same size as the printed text', async ({ page }) => {
+  await freshApp(page);
+  await addBook(page, fixture);
+  await openFirstBook(page);
+  const r = await page.evaluate(() => {
+    const wrap = document.querySelector('.pdf-page-wrap[data-page="1"]');
+    const scale = wrap.getBoundingClientRect().width / 612; // fixture pages are 612pt wide
+    const span = [...wrap.querySelectorAll('.textLayer span')].find((s) => s.textContent.includes('brown'));
+    const node = span.firstChild; const i = node.textContent.indexOf('brown');
+    const range = document.createRange(); range.setStart(node, i); range.setEnd(node, i + 5);
+    // Helvetica 14pt in the PDF: "brown" starts at 72pt + width of "The quick " (~65pt)
+    return { fontPx: parseFloat(getComputedStyle(span).fontSize), expectedFontPx: 14 * scale,
+      wordLeft: (range.getBoundingClientRect().left - wrap.getBoundingClientRect().left) / scale };
+  });
+  expect(Math.abs(r.fontPx - r.expectedFontPx) / r.expectedFontPx).toBeLessThan(0.15);
+  expect(Math.abs(r.wordLeft - 137)).toBeLessThan(8);
+});
+
 test('immersive mode still allows touch selection and shows the popover', async ({ browser }) => {
   const context = await browser.newContext({ hasTouch: true, viewport: { width: 800, height: 1000 }, serviceWorkers: 'block' });
   const page = await context.newPage();

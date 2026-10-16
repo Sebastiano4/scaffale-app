@@ -11,7 +11,13 @@ export async function buildTextLayer(wrap, textContent, viewport) {
   const layer = el('div', 'textLayer');
   layer.style.width = viewport.width + 'px';
   layer.style.height = viewport.height + 'px';
-  layer.style.setProperty('--scale-factor', viewport.scale); // required by pdf.js TextLayer
+  // pdf.js sizes and places every text span with calc(var(--total-scale-factor) * …px).
+  // Without it the invisible text is the wrong size and drifts away from the printed
+  // glyphs, so a finger on one word selects its neighbour.
+  layer.style.setProperty('--scale-factor', viewport.scale);
+  layer.style.setProperty('--total-scale-factor', viewport.scale * (viewport.userUnit || 1));
+  layer.style.setProperty('--scale-round-x', '1px');
+  layer.style.setProperty('--scale-round-y', '1px');
   wrap.appendChild(layer);
   try {
     const textLayer = new pdfjsLib.TextLayer({ textContentSource: textContent, container: layer, viewport });

@@ -26,3 +26,13 @@
 /* ---- read aloud ---- */
 #read-aloud-btn[hidden] { display: none; }
 #read-aloud-btn[aria-pressed="true"] { color: var(--accent); }
+
+/* ---- reader top bar on phones: 8 actions must fit next to the title ---- */
+.reader-progress { white-space: nowrap; }
+@media (max-width: 520px) {
+  .reader-topbar { gap: 2px; padding-left: 4px; padding-right: 4px; }
+  .reader-actions { gap: 0; }
+  .reader-topbar .icon-btn { width: 32px; height: 36px; }
+  .reader-title-wrap { padding: 0 2px; }
+  .reader-title { font-size: 14px; }
+}
