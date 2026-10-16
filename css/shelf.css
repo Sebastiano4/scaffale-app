@@ -1,1 +1,18 @@
-/* shelf */
+/* shelf: "Read" shelf of finished books, below the main grid */
+.read-shelf { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--border); }
+.read-shelf[hidden] { display: none; }
+.read-shelf__toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin: 0 0 16px; padding: 6px 12px 6px 8px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg-elevated); color: var(--text);
+  font: 600 14px var(--font-body); cursor: pointer;
+}
+.read-shelf__toggle:hover { border-color: var(--accent); }
+.read-shelf__chevron { display: inline-block; color: var(--accent); transition: transform 0.2s ease; }
+.read-shelf__toggle[aria-expanded="false"] .read-shelf__chevron { transform: rotate(-90deg); }
+.read-shelf__grid[hidden] { display: none; }
+.book-finished {
+  margin: 2px 0 0; font-size: 11px; color: var(--accent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
