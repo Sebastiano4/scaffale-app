@@ -62,3 +62,18 @@ export function sentenceBounds(text, index) {
   while (end > start && /\s/.test(text[end - 1])) end--;
   return { start, end };
 }
+
+/* Index of the box nearest to (x, y), or null if none is within maxDist px.
+   Vertical distance counts double, so a tap just past a line's end picks that line. */
+export function nearestRect(rects, x, y, maxDist) {
+  let best = null;
+  let bestScore = Infinity;
+  rects.forEach((r, i) => {
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    if (Math.hypot(dx, dy) > maxDist) return;
+    const score = dx + dy * 2;
+    if (score < bestScore) { bestScore = score; best = i; }
+  });
+  return best;
+}

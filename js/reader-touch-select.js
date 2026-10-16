@@ -3,7 +3,7 @@
    (quote / copy / define / translate / speak) keeps working unchanged. Also snaps mouse drag
    selections to whole words and drives pdf.js's anti-jump "selecting" class. */
 import { $ } from './dom.js';
-import { splitWords, wordAt, sentenceBounds } from './word-geometry.js';
+import { splitWords, wordAt, sentenceBounds, nearestRect } from './word-geometry.js';
 
 const LONG_PRESS_MS = 450;
 const SLOP = 10;              // px a finger may wander and still be a press/tap
@@ -11,6 +11,10 @@ const TAP_MAX_MS = 350;
 const DOUBLE_TAP_MS = 320;
 const DOUBLE_TAP_DIST = 30;
 const HIT_TOLERANCE = 4;      // px around a span still counts as "on the text"
+const PRESS_REACH = 18;       // px: a long-press this close to a word still selects it
+const TAP_REACH = 44;         // px: an extending tap / drag snaps to the nearest word within this
+const EDGE = 70;              // px from the top/bottom of the reader where a drag auto-scrolls
+const MAX_SCROLL_STEP = 18;   // px per frame at the very edge
 const SHORT_LINE = 0.75;      // a line ending before 75% of the page's text width ends a paragraph
 
 let anchor = null;            // Range of the word/sentence the current selection grew from
@@ -46,8 +50,31 @@ function caretAt(x, y) {
   return { node: t, offset: Math.round(((x - b.left) / Math.max(1, b.width)) * t.textContent.length) };
 }
 
-function wordRangeAt(x, y) {
-  const c = caretAt(x, y);
+/* Like caretAt, but a finger that lands near the text (between lines, past a line's end)
+   snaps to the nearest span within `reach` px. */
+function caretNear(x, y, reach) {
+  const exact = caretAt(x, y);
+  if (exact) return exact;
+  const spans = [];
+  for (const wrap of document.querySelectorAll('.pdf-page-wrap')) {
+    const w = wrap.getBoundingClientRect();
+    if (y < w.top - reach || y > w.bottom + reach) continue;
+    for (const s of wrap.querySelectorAll('.textLayer span')) {
+      const t = s.firstChild;
+      if (t && t.nodeType === 3 && /[\p{L}\p{N}]/u.test(t.textContent)) spans.push(s);
+    }
+  }
+  const rects = spans.map((s) => s.getBoundingClientRect());
+  const i = nearestRect(rects, x, y, reach);
+  if (i === null) return null;
+  const t = spans[i].firstChild;
+  const b = rects[i];
+  const frac = Math.min(1, Math.max(0, (x - b.left) / Math.max(1, b.width)));
+  return { node: t, offset: Math.round(frac * t.textContent.length) };
+}
+
+function wordRangeAt(x, y, reach = 0) {
+  const c = reach ? caretNear(x, y, reach) : caretAt(x, y);
   if (!c) return null;
   const w = wordAt(c.node.textContent, Math.min(c.offset, c.node.textContent.length));
   if (!w) return null;
@@ -182,26 +209,57 @@ function initTouch(scroll) {
     const p = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, longPressed: false };
     p.timer = setTimeout(() => {
       if (press !== p || p.moved) return;
-      const wr = wordRangeAt(p.x, p.y);
+      const wr = wordRangeAt(p.x, p.y, PRESS_REACH);
       if (!wr) return;
       p.longPressed = true;
+      p.lastX = p.x;
+      p.lastY = p.y;
       applyRange(wr);
       setAnchor(wr);
       if (navigator.vibrate) { try { navigator.vibrate(8); } catch (err) { /* not allowed */ } }
+      autoScroll(p);
     }, LONG_PRESS_MS);
     press = p;
   }, { passive: true });
 
+  // after a long-press the finger drags the selection end (the page must not scroll)
+  const dragTo = (p) => {
+    const wr = wordRangeAt(p.lastX, p.lastY, TAP_REACH);
+    if (wr && anchor) extendTo(wr);
+  };
+  // near the top/bottom edge, keep scrolling (and extending) while the finger stays there
+  const autoScroll = (p) => {
+    if (press !== p) return;
+    const r = scroll.getBoundingClientRect();
+    let step = 0;
+    if (p.lastY > r.bottom - EDGE) step = ((p.lastY - (r.bottom - EDGE)) / EDGE) * MAX_SCROLL_STEP;
+    else if (p.lastY < r.top + EDGE) step = -(((r.top + EDGE) - p.lastY) / EDGE) * MAX_SCROLL_STEP;
+    if (p.dragged && step) {
+      scroll.scrollTop += Math.max(-MAX_SCROLL_STEP, Math.min(MAX_SCROLL_STEP, step));
+      dragTo(p);
+    }
+    p.raf = requestAnimationFrame(() => autoScroll(p));
+  };
+
   scroll.addEventListener('touchmove', (e) => {
     if (!press) return;
     const t = e.touches[0];
+    if (press.longPressed) {
+      e.preventDefault();
+      press.lastX = t.clientX;
+      press.lastY = t.clientY;
+      if (Math.hypot(t.clientX - press.x, t.clientY - press.y) > SLOP) press.dragged = true;
+      if (press.dragged) dragTo(press);
+      return;
+    }
     if (Math.hypot(t.clientX - press.x, t.clientY - press.y) > SLOP) { press.moved = true; clearTimeout(press.timer); }
-  }, { passive: true });
+  }, { passive: false });
 
   scroll.addEventListener('touchend', (e) => {
     const p = press; press = null;
     if (!p) return;
     clearTimeout(p.timer);
+    cancelAnimationFrame(p.raf);
     if (p.longPressed) { e.preventDefault(); return; } // keep our selection: no click, no collapse
     if (p.moved || Date.now() - p.time > TAP_MAX_MS) return;
 
@@ -216,12 +274,15 @@ function initTouch(scroll) {
 
     if (!anchor || !hasSelection()) return; // nothing selected: a plain tap stays a plain tap
     e.preventDefault();
-    const wr = wordRangeAt(p.x, p.y);
+    const wr = wordRangeAt(p.x, p.y, TAP_REACH);
     if (wr) extendTo(wr);
-    else { window.getSelection().removeAllRanges(); anchor = null; }
+    else { window.getSelection().removeAllRanges(); anchor = null; } // far from any text
   }, { passive: false });
 
-  scroll.addEventListener('touchcancel', () => { if (press) clearTimeout(press.timer); press = null; });
+  scroll.addEventListener('touchcancel', () => {
+    if (press) { clearTimeout(press.timer); cancelAnimationFrame(press.raf); }
+    press = null;
+  });
 
   // Android's own long-press selection/callout would fight ours on the text layer
   scroll.addEventListener('contextmenu', (e) => {

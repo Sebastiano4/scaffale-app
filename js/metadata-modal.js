@@ -1,18 +1,22 @@
 import { $, el, showToast, fmtDate } from './dom.js';
 import { DB } from './db.js';
 import { loadLibrary, deleteBooksWithUndo } from './library.js';
+import { normalizeRating, starFills, ratingLabel } from './rating.js';
 
 /* ---- metadata modal (used for add-fallback edits and later edits) ---- */
 let modalCtx = null; // { mode: 'edit', book }
 
 function paintStars(rating) {
-  document.querySelectorAll('#meta-rating .star').forEach((s) => {
-    s.classList.toggle('star--on', Number(s.dataset.v) <= rating);
+  const fills = starFills(rating);
+  document.querySelectorAll('#meta-rating .star').forEach((s, i) => {
+    s.classList.toggle('star--on', fills[i] === 'full');
+    s.classList.toggle('star--half', fills[i] === 'half');
   });
+  $('#meta-rating').setAttribute('aria-label', 'Rating: ' + ratingLabel(rating));
 }
 
 export function openMetadataModal({ mode, book }) {
-  modalCtx = { mode, book, rating: book.rating || 0 };
+  modalCtx = { mode, book, rating: normalizeRating(book.rating) };
   $('#metadata-modal-title').textContent = mode === 'edit' ? 'Edit book' : 'Confirm the book details';
   $('#meta-title').value = book.title || '';
   $('#meta-author').value = book.author || '';
@@ -57,9 +61,12 @@ export function initMetadataModal() {
 
   // star rating interaction
   document.querySelectorAll('#meta-rating .star').forEach((star) => {
-    star.addEventListener('click', () => {
+    // left half of a star = half a star less; keyboard clicks (no pointer position) give the whole star
+    star.addEventListener('click', (e) => {
       if (!modalCtx) return;
-      modalCtx.rating = Number(star.dataset.v);
+      const r = star.getBoundingClientRect();
+      const leftHalf = e.detail > 0 && e.clientX < r.left + r.width / 2;
+      modalCtx.rating = Number(star.dataset.v) - (leftHalf ? 0.5 : 0);
       paintStars(modalCtx.rating);
     });
   });

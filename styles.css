@@ -678,6 +678,13 @@ button { font-family: inherit; }
   font-size: 26px; line-height: 1; color: var(--border);
 }
 .star--on { color: var(--accent); }
+/* half star: left half lit (also on library cards) */
+.star--half,
+.book-stars__half {
+  background: linear-gradient(90deg, var(--accent) 50%, var(--border) 50%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
 .star-clear {
   border: none; background: none; cursor: pointer; color: var(--text-dim);
   font-size: 14px; margin-left: 8px; padding: 4px 8px;

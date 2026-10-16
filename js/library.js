@@ -7,6 +7,7 @@ import { openMetadataModal } from './metadata-modal.js';
 import { openReader } from './reader.js';
 import { hashBlob } from './hash.js';
 import { requestPersistence, storageInfo, formatStorageInfo } from './storage.js';
+import { starsHtml, ratingLabel } from './rating.js';
 
 /* ======================================================================
    Library view
@@ -278,7 +279,9 @@ function buildCard(book, mostRecentId) {
     meta.appendChild(el('p', 'book-title', escapeHtml(book.title)));
     meta.appendChild(el('p', 'book-author', escapeHtml(book.author || 'Unknown author')));
     if (book.rating > 0) {
-      meta.appendChild(el('p', 'book-stars', '★'.repeat(book.rating) + '<span class="book-stars__off">' + '★'.repeat(5 - book.rating) + '</span>'));
+      const stars = el('p', 'book-stars', starsHtml(book.rating));
+      stars.setAttribute('aria-label', ratingLabel(book.rating));
+      meta.appendChild(stars);
     }
     meta.onclick = () => {
       if (selectMode) { toggleSelected(); return; }

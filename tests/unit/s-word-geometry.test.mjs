@@ -38,3 +38,16 @@ test('sentenceBounds does not split on abbreviations like "e.g." or initials mid
   const s = sentenceBounds(t, t.indexOf('hammers'));
   assert.equal(t.slice(s.start, s.end), 'Use tools e.g. hammers.');
 });
+
+test('nearestRect: the closest box, same line preferred, null when too far', async () => {
+  const { nearestRect } = await import('../../js/word-geometry.js');
+  const R = (left, top, right, bottom) => ({ left, top, right, bottom });
+  const boxes = [R(0, 0, 100, 20), R(110, 0, 200, 20), R(0, 30, 100, 50)];
+  assert.equal(nearestRect(boxes, 50, 10, 30), 0);        // inside
+  assert.equal(nearestRect(boxes, 225, 10, 30), 1);       // past the line end → last box of that line
+  assert.equal(nearestRect(boxes, 50, 24, 30), 0);        // gap between lines, closer to the upper one
+  assert.equal(nearestRect(boxes, 50, 27, 30), 2);
+  assert.equal(nearestRect(boxes, 150, 26, 30), 1);       // same distance-ish: vertical counts double
+  assert.equal(nearestRect(boxes, 400, 400, 30), null);   // nothing near
+  assert.equal(nearestRect([], 0, 0, 30), null);
+});
