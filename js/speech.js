@@ -1,12 +1,20 @@
+import { splitSentences } from './tts-text.js';
+import { currentSpeechOptions } from './tts-voices.js';
+
 export const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window
   && typeof window.SpeechSynthesisUtterance === 'function';
 
+export const PAUSE_SENTENCE = 250; // ms of silence between sentences at speed 1
+export const PAUSE_PARAGRAPH = 700; // ms of silence after a paragraph end at speed 1
+
 let token = 0; // bumped on every speak/stop so callbacks of cancelled utterances are ignored
 let current = null; // the utterance being spoken: kept referenced so Chrome can't GC it (and drop onend)
+let pauseTimer = null;
 
 /* Split text into chunks of at most `max` chars: whole sentences packed together,
    over-long sentences hard-wrapped at word boundaries. Long utterances get cut off
-   (desktop Chrome ~15 s) or rejected (Android ~4000 chars). */
+   (desktop Chrome ~15 s) or rejected (Android ~4000 chars).
+   (Kept for compatibility; speaking now goes sentence by sentence via tts-text.js.) */
 export function splitForSpeech(text, max = 200) {
   const sentences = String(text || '').replace(/\s+/g, ' ').trim().match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)\s*/g) || [];
   const pieces = [];
@@ -33,26 +41,47 @@ export function splitForSpeech(text, max = 200) {
   return chunks;
 }
 
-export function speak(text, { onend, onerror } = {}) {
+/* Speak a queue of sentences ([{ text, paragraphEnd }]), one utterance each, with a
+   natural pause after every sentence (longer after a paragraph end), scaled by the speed.
+   Voice, speed and pitch are read from the settings for every utterance, so changes made
+   while listening apply from the next sentence. onstart(i, item) fires as item i starts;
+   onend() after the last one. */
+export function speakQueue(items, { onstart, onend, onerror } = {}) {
   if (!speechSupported) return;
-  const chunks = splitForSpeech(text);
-  if (!chunks.length) return;
+  const queue = (items || []).filter((it) => it && it.text && it.text.trim());
+  if (!queue.length) return;
+  clearTimeout(pauseTimer);
   window.speechSynthesis.cancel();
   const mine = ++token;
-  const sayChunk = (i) => {
-    const u = new SpeechSynthesisUtterance(chunks[i]);
-    u.lang = navigator.language || 'en-US';
+  const say = (i) => {
+    if (mine !== token) return;
+    const opts = currentSpeechOptions();
+    const u = new SpeechSynthesisUtterance(queue[i].text);
+    u.lang = opts.lang;
+    u.rate = opts.rate;
+    u.pitch = opts.pitch;
+    if (opts.voice) { try { u.voice = opts.voice; } catch (e) { /* not a real SpeechSynthesisVoice */ } }
     u.onend = () => {
       if (mine !== token) return;
-      if (i + 1 < chunks.length) { sayChunk(i + 1); return; }
       current = null;
+      if (i + 1 < queue.length) {
+        const pause = (queue[i].paragraphEnd ? PAUSE_PARAGRAPH : PAUSE_SENTENCE) / (opts.rate || 1);
+        pauseTimer = setTimeout(() => say(i + 1), pause);
+        return;
+      }
       if (onend) onend();
     };
     u.onerror = () => { if (mine !== token) return; current = null; if (onerror) onerror(); };
     current = u;
+    if (onstart) onstart(i, queue[i]);
     window.speechSynthesis.speak(u);
   };
-  sayChunk(0);
+  say(0);
+}
+
+/* Free text (e.g. the selection popover's Speak): same sentence pacing and voice settings. */
+export function speak(text, callbacks = {}) {
+  speakQueue(splitSentences(text), callbacks);
 }
 
 /* iOS Safari only allows speech started synchronously inside a user gesture:
@@ -68,6 +97,7 @@ export function unlockSpeech() {
 
 export function stopSpeaking() {
   token++;
+  clearTimeout(pauseTimer);
   current = null;
   if (speechSupported) window.speechSynthesis.cancel();
 }
