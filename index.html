@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="css/tts.css">
 <link rel="stylesheet" href="css/shelf.css">
 <link rel="stylesheet" href="css/dictionary.css">
+<link rel="stylesheet" href="css/sync.css">
 </head>
 <body>
 
@@ -57,6 +58,11 @@
       <div class="lib-sidebar__label">Shelves</div>
       <div id="sidebar-shelves" class="lib-sidebar__shelves"></div>
 
+      <button class="sync-btn" id="sync-btn" type="button" data-status="off" hidden>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/></svg>
+        <span class="sync-label">Connect Google Drive</span>
+      </button>
+
       <div class="lib-sidebar__footer">
         <button class="icon-btn" id="sidebar-theme-toggle" type="button" aria-label="Change theme" title="Change theme">
           <svg viewBox="0 0 24 24" width="17" height="17"><path fill="currentColor" d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.4 5.4 0 01-7.54-7.54A9.05 9.05 0 0012 3z"/></svg>
@@ -74,6 +80,10 @@
             <button class="lib-settings__item" id="sidebar-menu-import" type="button">
               <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M5 4h14v2H5zm7 3 5 7h-3v6h-4v-6H7z"/></svg>
               Import backup
+            </button>
+            <button class="lib-settings__item" id="sync-disconnect" type="button" hidden>
+              <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M19.35 10.04A7.49 7.49 0 0012 4c-1.48 0-2.85.43-4.01 1.17l1.46 1.46A5.47 5.47 0 0112 6c3.04 0 5.5 2.46 5.5 5.5v.5H19c1.66 0 3 1.34 3 3 0 1.13-.64 2.11-1.56 2.62l1.45 1.45C23.16 18.16 24 16.68 24 15c0-2.64-2.05-4.78-4.65-4.96zM3 5.27l2.75 2.74C2.56 8.15 0 10.77 0 14c0 3.31 2.69 6 6 6h11.73l2 2L21 20.73 4.27 4 3 5.27zM7.73 10l8 8H6c-2.21 0-4-1.79-4-4s1.79-4 4-4h1.73z"/></svg>
+              Disconnect Google Drive
             </button>
             <div id="sidebar-storage-info" class="menu-info"></div>
           </div>
@@ -326,6 +336,7 @@
       <h3>BookNest</h3>
       <button id="menu-stats" class="menu-item">Reading statistics</button>
       <button id="menu-dict" class="menu-item">Dictionary</button>
+      <button id="menu-sync" class="menu-item" data-status="off" hidden>Connect Google Drive</button>
       <button id="menu-export" class="menu-item">Export library (backup)</button>
       <button id="menu-import" class="menu-item">Import backup</button>
       <div class="modal__actions">

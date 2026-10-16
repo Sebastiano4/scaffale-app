@@ -1,5 +1,5 @@
 /* Bump CACHE_NAME on every release, and list every file the app loads in APP_SHELL. */
-const CACHE_NAME = 'booknest-v17';
+const CACHE_NAME = 'booknest-v18';
 
 const APP_SHELL = [
   './',
@@ -12,6 +12,7 @@ const APP_SHELL = [
   './css/tts.css',
   './css/shelf.css',
   './css/dictionary.css',
+  './css/sync.css',
   './app.js',
   './js/pdf.js',
   './js/state.js',
@@ -44,6 +45,13 @@ const APP_SHELL = [
   './js/dictionary-lookup.js',
   './js/dictionary-view.js',
   './js/rating.js',
+  './js/sync-merge.js',
+  './js/sync-state.js',
+  './js/sync-config.js',
+  './js/drive-auth.js',
+  './js/drive-api.js',
+  './js/sync.js',
+  './js/sync-view.js',
   './manifest.json',
   './vendor/pdf.min.mjs',
   './vendor/pdf.worker.min.mjs',
@@ -76,6 +84,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
+  // only the app's own files: Google sign-in and Drive responses are never cached
+  if (new URL(req.url).origin !== self.location.origin) return;
 
   // Navigations: try network first, fall back to cached shell (offline support)
   if (req.mode === 'navigate') {

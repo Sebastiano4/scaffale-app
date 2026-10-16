@@ -1,0 +1,27 @@
+/* Google Drive sync: status button and "not downloaded yet" cover badge */
+
+.sync-btn {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; margin: 12px 0 4px; padding: 9px 12px;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--bg-elevated-2); color: var(--text-dim);
+  font-family: var(--font-body); font-size: 13px; text-align: left; cursor: pointer;
+}
+.sync-btn:hover { color: var(--text); border-color: var(--accent); }
+.sync-btn svg { flex: none; }
+.sync-btn[data-status="ok"] svg { color: var(--accent-2); }
+.sync-btn[data-status="syncing"] svg { color: var(--accent); animation: sync-pulse 1s ease-in-out infinite alternate; }
+.sync-btn[data-status="needs-auth"],
+.sync-btn[data-status="off"] { color: var(--accent); border-color: var(--accent-soft); }
+.sync-btn[data-status="error"] { color: #d9534f; }
+@keyframes sync-pulse { from { opacity: 0.35; } to { opacity: 1; } }
+
+#menu-sync[data-status="needs-auth"],
+#menu-sync[data-status="off"] { color: var(--accent); }
+
+.book-cloud {
+  position: absolute; left: 8px; bottom: 8px;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(20, 23, 31, 0.78); color: #fff;
+}

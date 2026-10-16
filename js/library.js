@@ -259,6 +259,11 @@ function buildCard(book, mostRecentId) {
     fill.style.height = pct + '%';
     ribbon.appendChild(fill);
     cover.appendChild(ribbon);
+    if (!book.fileBlob) {
+      const cloud = el('div', 'book-cloud', '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M19.35 10.04A7.49 7.49 0 0012 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 000 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>');
+      cloud.title = 'On Google Drive — downloading';
+      cover.appendChild(cloud);
+    }
 
     const st = bookStatus(book);
     if (st === 'read') cover.appendChild(el('div', 'book-badge book-badge--read', 'Read'));
@@ -323,6 +328,15 @@ export async function addBookFromFile(file) {
   // crypto.subtle only exists in secure contexts (https / localhost): over plain-HTTP LAN, skip dedupe
   const hash = globalThis.crypto && crypto.subtle ? await hashBlob(file) : null;
   const existing = hash && await findBookByHash(hash);
+  if (existing && !existing.fileBlob) {
+    // the book came from another device and is still downloading: use this copy of the file
+    existing.fileBlob = file;
+    delete existing.remoteOnly;
+    await DB.putRaw(existing);
+    await loadLibrary();
+    showToast('Ready to read: ' + existing.title);
+    return;
+  }
   if (existing) { showToast('Already in library: ' + existing.title, 3500); return; }
   const buf = await file.arrayBuffer();
   const pdfDoc = await pdfjsLib.getDocument({ data: buf.slice(0) }).promise;

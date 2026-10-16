@@ -11,6 +11,7 @@ import { initReaderSearch } from './js/reader-search.js';
 import { initTouchSelect } from './js/reader-touch-select.js';
 import { initImmersive } from './js/immersive.js';
 import { initDictionary } from './js/dictionary-view.js';
+import { initSyncView } from './js/sync-view.js';
 
 initTheme();
 initReadingTimeTracking();
@@ -25,6 +26,7 @@ initReaderSearch();
 initTouchSelect();
 initImmersive();
 initDictionary();
+initSyncView();
 loadLibrary();
 
 if ('serviceWorker' in navigator) {

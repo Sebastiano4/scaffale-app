@@ -15,6 +15,10 @@ import { buildTextLayer, clearLiveSelection } from './reader-selection.js';
 export async function openReader(id, opts = {}) {
   const book = await DB.get(id);
   if (!book) return;
+  if (!book.fileBlob) {
+    showToast(navigator.onLine ? 'This book is still downloading from Google Drive…' : 'This book is on Google Drive: connect to the internet to download it', 3500);
+    return;
+  }
 
   state.reader.book = book;
   state.reader.mode = book.readingMode || 'continuous';
@@ -67,6 +71,7 @@ export async function closeReader() {
   $('#pdf-pages').innerHTML = '';
   $('#reader-view').classList.remove('view--active');
   $('#library-view').classList.add('view--active');
+  window.dispatchEvent(new Event('booknest:sync-soon')); // push the reading position now
   $('#side-panel').hidden = true;
   $('#word-card').hidden = true;
   resetSearchUI();
