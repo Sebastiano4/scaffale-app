@@ -1,6 +1,8 @@
 /* tts — read-aloud settings panel + sentence highlight (Track T) */
 
 #tts-settings-btn[hidden], .tts-settings[hidden] { display: none; }
+/* phones: the reader top bar is crowded, keep this secondary control narrow */
+@media (max-width: 480px) { #tts-settings-btn { width: 30px; } }
 
 /* panel: same look as .appearance-popover, anchored under the reader top bar */
 .tts-settings {
