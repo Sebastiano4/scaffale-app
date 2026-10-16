@@ -1,6 +1,6 @@
 import { pdfjsLib } from './pdf.js';
 import { state, bookStatus, STATUS_LABELS } from './state.js';
-import { $, el, uid, showToast, escapeHtml } from './dom.js';
+import { $, el, uid, showToast, escapeHtml, fmtDate } from './dom.js';
 import { DB } from './db.js';
 import { extractMetadata, renderThumbnail } from './metadata.js';
 import { openMetadataModal } from './metadata-modal.js';
@@ -75,6 +75,8 @@ function updateSelectionBar() {
 function openCardMenu(book, anchor) {
   const menu = $('#card-menu');
   cardMenuBook = book;
+  const toggleRead = menu.querySelector('[data-action="toggle-read"]');
+  if (toggleRead) toggleRead.textContent = bookStatus(book) === 'read' ? 'Mark as unread' : 'Mark as read';
   const r = anchor.getBoundingClientRect();
   menu.style.top = (r.bottom + 4) + 'px';
   menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 158)) + 'px';
@@ -99,7 +101,8 @@ export function renderStatusBar() {
   chips.innerHTML = '';
   for (const key of ['all', 'toread', 'reading', 'read']) {
     const count = key === 'all' ? state.books.length : state.books.filter((b) => bookStatus(b) === key).length;
-    if (key !== 'all' && count === 0 && state.activeStatus !== key) continue;
+    // "Read" always stays visible so the shelf of finished books can always be found
+    if (key !== 'all' && key !== 'read' && count === 0 && state.activeStatus !== key) continue;
     const chip = el('button', 'chip' + (state.activeStatus === key ? ' chip--active' : ''),
       STATUS_LABELS[key] + ' · ' + count);
     chip.onclick = () => { state.activeStatus = key; renderStatusBar(); renderGrid(); };
@@ -148,6 +151,7 @@ export function renderGrid() {
   if (state.books.length === 0) {
     selected.clear(); updateSelectionBar();
     grid.hidden = true; grid.innerHTML = '';
+    $('#read-shelf').hidden = true; $('#read-shelf').innerHTML = '';
     noResults.hidden = true;
     empty.hidden = false;
     fab.hidden = true;
@@ -166,20 +170,79 @@ export function renderGrid() {
   for (const id of [...selected]) if (!list.some((b) => b.id === id)) selected.delete(id);
   updateSelectionBar();
 
-  if (list.length === 0) {
-    grid.hidden = true; grid.innerHTML = '';
-    noResults.hidden = false;
-    return;
-  }
-  noResults.hidden = true;
-  grid.hidden = false;
-  grid.innerHTML = '';
+  // finished books live on their own shelf below the main grid
+  const unread = list.filter((b) => bookStatus(b) !== 'read');
+  const read = list.filter((b) => bookStatus(b) === 'read');
 
   const mostRecentId = state.books.slice().sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0))[0]?.lastOpenedAt
     ? state.books.slice().sort((a, b) => (b.lastOpenedAt || 0) - (a.lastOpenedAt || 0))[0].id
     : null;
 
-  list.forEach((book) => {
+  noResults.hidden = list.length > 0;
+  grid.innerHTML = '';
+  grid.hidden = unread.length === 0;
+  unread.forEach((book) => grid.appendChild(buildCard(book, mostRecentId)));
+  renderReadShelf(read, mostRecentId);
+}
+
+const SHELF_COLLAPSED_KEY = 'booknest-read-shelf-collapsed';
+
+function renderReadShelf(books, mostRecentId) {
+  const shelf = $('#read-shelf');
+  shelf.innerHTML = '';
+  if (books.length === 0) { shelf.hidden = true; return; }
+  shelf.hidden = false;
+  // the "Read" filter is a request to see these books: never show them collapsed then
+  const collapsed = state.activeStatus !== 'read' && localStorage.getItem(SHELF_COLLAPSED_KEY) === '1';
+
+  const toggle = el('button', 'read-shelf__toggle');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', String(!collapsed));
+  toggle.innerHTML = '<span class="read-shelf__chevron" aria-hidden="true">▾</span>'
+    + '<span>Read · ' + books.length + '</span>';
+  toggle.onclick = () => {
+    localStorage.setItem(SHELF_COLLAPSED_KEY, collapsed ? '0' : '1');
+    renderGrid();
+  };
+  shelf.appendChild(toggle);
+
+  const shelfGrid = el('div', 'book-grid read-shelf__grid');
+  shelfGrid.hidden = collapsed;
+  books.forEach((book) => {
+    const card = buildCard(book, mostRecentId);
+    if (book.finishedAt) card.querySelector('.book-meta').appendChild(el('p', 'book-finished', 'Finished ' + fmtDate(book.finishedAt)));
+    shelfGrid.appendChild(card);
+  });
+  shelf.appendChild(shelfGrid);
+}
+
+/* Mark a book read/unread from the card menu, with Undo restoring the previous fields. */
+async function setBookRead(book, read) {
+  const prev = { status: book.status, startedAt: book.startedAt, finishedAt: book.finishedAt };
+  const fresh = (await DB.get(book.id)) || book;
+  if (read) {
+    fresh.status = 'read';
+    if (!fresh.startedAt) fresh.startedAt = fresh.addedAt || Date.now();
+    fresh.finishedAt = Date.now();
+  } else {
+    delete fresh.status;
+    delete fresh.finishedAt;
+  }
+  await DB.put(fresh);
+  await loadLibrary();
+  showToast(read ? 'Marked as read' : 'Marked as unread', UNDO_MS, {
+    label: 'Undo',
+    onClick: async () => {
+      const cur = await DB.get(book.id);
+      if (!cur) return;
+      for (const [k, v] of Object.entries(prev)) { if (v === undefined) delete cur[k]; else cur[k] = v; }
+      await DB.put(cur);
+      await loadLibrary();
+    },
+  });
+}
+
+function buildCard(book, mostRecentId) {
     const card = el('div', 'book-card' + (book.id === mostRecentId ? ' book-card--current' : ''));
 
     const cover = el('div', 'book-cover');
@@ -230,8 +293,7 @@ export function renderGrid() {
     card.appendChild(cover);
     card.appendChild(meta);
     card.appendChild(menuBtn);
-    grid.appendChild(card);
-  });
+    return card;
 }
 
 // Legacy books have no hash: compute it lazily the first time we need to compare.
@@ -299,7 +361,7 @@ function renderSidebarShelves() {
   host.innerHTML = '';
   for (const key of ['all', 'toread', 'reading', 'read']) {
     const count = key === 'all' ? state.books.length : state.books.filter((b) => bookStatus(b) === key).length;
-    if (key !== 'all' && count === 0 && state.activeStatus !== key) continue;
+    if (key !== 'all' && key !== 'read' && count === 0 && state.activeStatus !== key) continue;
     const item = el('button', 'chip' + (state.activeStatus === key ? ' chip--active' : ''));
     item.type = 'button';
     item.innerHTML = `<span>${STATUS_LABELS[key]}</span><span>${count}</span>`;
@@ -330,6 +392,7 @@ export function initLibrary() {
     $('#card-menu').hidden = true;
     if (action === 'edit') openMetadataModal({ mode: 'edit', book: cardMenuBook });
     if (action === 'delete') deleteBooksWithUndo([cardMenuBook.id]);
+    if (action === 'toggle-read') setBookRead(cardMenuBook, bookStatus(cardMenuBook) !== 'read');
   });
   document.addEventListener('pointerdown', (e) => {
     const m = $('#card-menu');
