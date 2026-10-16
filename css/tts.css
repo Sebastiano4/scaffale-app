@@ -1,1 +1,42 @@
-/* tts */
+/* tts — read-aloud settings panel + sentence highlight (Track T) */
+
+#tts-settings-btn[hidden], .tts-settings[hidden] { display: none; }
+
+/* panel: same look as .appearance-popover, anchored under the reader top bar */
+.tts-settings {
+  position: absolute;
+  right: 10px; top: calc(var(--safe-top) + 62px);
+  z-index: 42;
+  width: 272px; max-width: calc(100vw - 20px);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow);
+}
+.tts-settings__title {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 12px;
+}
+.tts-field { display: block; margin-bottom: 14px; }
+.tts-field span, .tts-slider span {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 11.5px; color: var(--text-dim); margin-bottom: 8px;
+}
+.tts-slider span b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.tts-field select {
+  width: 100%; padding: 8px 10px; font: inherit; font-size: 13px;
+  color: var(--text); background: var(--bg-elevated-2);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.tts-slider { display: block; margin-bottom: 12px; }
+.tts-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
+.tts-test {
+  width: 100%; margin-top: 2px; padding: 9px 0;
+  border: 0; background: var(--accent-soft); color: var(--accent);
+  font-size: 12.5px; font-weight: 700; border-radius: 999px; cursor: pointer;
+}
+.tts-hint { margin: 10px 2px 0; font-size: 11px; line-height: 1.4; color: var(--text-dim); }
+
+/* the sentence being read */
+.pdf-page-wrap .textLayer span.tts-current {
+  background: rgba(227, 165, 72, 0.30);
+  border-radius: 2px;
+}

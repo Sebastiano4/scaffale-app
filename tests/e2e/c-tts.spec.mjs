@@ -87,11 +87,13 @@ test('stop then immediate restart with onend-on-cancel speaks each page once, in
   await expect.poll(() => joined(page), { timeout: 5000 }).toContain('end of the nest story');
   await expect(page.locator('#read-aloud-btn')).toHaveAttribute('aria-pressed', 'false', { timeout: 5000 });
   const all = await joined(page);
-  // page 1 (stopped), then pages 1,2,3 once each
-  expect(all.split('quick brown fox').length - 1).toBe(2);
+  // page 1's first sentence (stopped), then pages 1,2,3 once each (one utterance per sentence)
+  expect(all.split('Chapter one').length - 1).toBe(2);
+  expect(all.split('quick brown fox').length - 1).toBe(1);
   expect(all.split('bird builds a nest').length - 1).toBe(1);
   expect(all.split('end of the nest story').length - 1).toBe(1);
-  expect(all.lastIndexOf('quick brown fox')).toBeLessThan(all.indexOf('bird builds a nest'));
+  expect(all.lastIndexOf('Chapter one')).toBeLessThan(all.indexOf('quick brown fox'));
+  expect(all.indexOf('quick brown fox')).toBeLessThan(all.indexOf('bird builds a nest'));
 });
 
 test('a long page is spoken as a queue of short chunks', async ({ page }) => {
@@ -104,7 +106,7 @@ test('a long page is spoken as a queue of short chunks', async ({ page }) => {
   await expect(page.locator('#read-aloud-btn')).toHaveAttribute('aria-pressed', 'false', { timeout: 5000 });
   const parts = await spokenText(page);
   expect(parts.length).toBeGreaterThan(2);
-  for (const p of parts) expect(p.length).toBeLessThanOrEqual(200);
+  for (const p of parts) expect(p.length).toBeLessThanOrEqual(220); // splitSentences max
   const all = parts.join(' ').replace(/\s+/g, ' ');
   expect(all).toContain('Intro sentence.');
   expect(all).toContain('word0 word1');

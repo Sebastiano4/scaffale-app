@@ -164,3 +164,8 @@ test('linesFromItems groups items by hasEOL and marks blank gaps and indents', (
   ];
   assert.deepEqual(linesFromItems(items), ['First line of text.', 'Second line.', '', 'After a gap.', '  Indented line.']);
 });
+
+test('linesFromItems: a gap is found even with only three lines', () => {
+  const it = (str, y) => ({ str, hasEOL: true, transform: [14, 0, 0, 14, 72, y], height: 14 });
+  assert.deepEqual(linesFromItems([it('One.', 720), it('Two.', 684), it('Three.', 666)]), ['One.', '', 'Two.', 'Three.']);
+});

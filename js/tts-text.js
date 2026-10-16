@@ -174,7 +174,7 @@ export function linesFromItems(items) {
   const gaps = [];
   for (let i = 1; i < lines.length; i++) { const g = lines[i - 1].y - lines[i].y; if (g > 0) gaps.push(g); }
   gaps.sort((a, b) => a - b);
-  const median = gaps.length >= 2 ? gaps[Math.floor(gaps.length / 2)] : 0;
+  const median = gaps.length >= 2 ? gaps[Math.floor((gaps.length - 1) / 2)] : 0; // lower median: the usual line spacing
   const minX = Math.min(...lines.map((l) => l.x));
   const out = [];
   lines.forEach((l, i) => {
