@@ -44,7 +44,8 @@ async function touch(page, p, { holdMs = 40, moves = [], stepMs = 25, endHoldMs 
   await page.waitForTimeout(300);
 }
 const path = (a, b, n = 6) => Array.from({ length: n }, (_, i) => ({ x: a.x + ((b.x - a.x) * (i + 1)) / n, y: a.y + ((b.y - a.y) * (i + 1)) / n }));
-const selection = (page) => page.evaluate(() => getSelection().toString().replace(/\s+/g, ' ').trim());
+// the app's own reading of the selection (touch turns the browser's native selection off)
+const selection = (page) => page.evaluate(async () => (await import('./js/reader-touch-select.js')).selectionText().replace(/\s+/g, ' ').trim());
 
 test.beforeEach(async ({ page }) => {
   await freshApp(page);
@@ -103,4 +104,44 @@ test('a tap far from any text still clears the selection', async ({ page }) => {
   });
   await touch(page, far);
   expect(await selection(page)).toBe('');
+});
+
+test("with a finger, the browser's own text selection is off (it fought ours and jumped lines)", async ({ page }) => {
+  const a = await wordBox(page, 'numero', 1, 2);
+  await touch(page, a, { holdMs: 700 });
+  const userSelect = await page.locator('.pdf-page-wrap[data-page="1"] .textLayer span').first()
+    .evaluate((s) => getComputedStyle(s).webkitUserSelect || getComputedStyle(s).userSelect);
+  expect(userSelect).toBe('none');
+  // …and the app's selection still drives the popover
+  await expect(page.locator('#selection-popover')).toBeVisible();
+  await expect(page.locator('#selection-popover')).toHaveAttribute('data-text', 'numero');
+});
+
+test('the pressed word is exact even in the middle of a long line', async ({ page }) => {
+  for (const [word, nth] of [['testo', 3], ['alcune', 7], ['prova', 9], ['del', 11]]) {
+    const b = await wordBox(page, word, 1, nth);
+    await touch(page, b, { holdMs: 700 });
+    expect(await selection(page)).toBe(word);
+    await page.evaluate(() => getSelection().removeAllRanges());
+  }
+});
+
+test('dragging line by line selects one more line at a time', async ({ page }) => {
+  const a = await wordBox(page, 'Riga', 1, 3);
+  const words = [];
+  for (let n = 3; n <= 6; n++) words.push(await wordBox(page, 'selezione', 1, n));
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: a.x, y: a.y }] });
+  await page.waitForTimeout(700);
+  const seen = [];
+  for (const w of words) {
+    for (let i = 1; i <= 4; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: w.x, y: w.y - w.h + (w.h * i) / 4 }] });
+      await page.waitForTimeout(20);
+    }
+    seen.push((await selection(page)).split('selezione').length - 1);
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+  expect(seen).toEqual([1, 2, 3, 4]);
 });

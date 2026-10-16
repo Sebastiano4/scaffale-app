@@ -7,7 +7,7 @@ import { speak, speechSupported } from './speech.js';
 import { stopReadAloud } from './reader-tts.js';
 import { isDictionarySelection } from './dictionary-core.js';
 import { saveWordFromSelection } from './dictionary-view.js';
-import { sentenceAround } from './reader-touch-select.js';
+import { sentenceAround, selectionText } from './reader-touch-select.js';
 
 /* ---- text layer (selection + search highlighting) via pdf.js's official TextLayer ---- */
 export async function buildTextLayer(wrap, textContent, viewport) {
@@ -202,7 +202,7 @@ export function initReaderSelection() {
   document.addEventListener('selectionchange', () => {
     if (!state.reader.book || $('#reader-view').classList.contains('view--active') === false) return;
     const sel = window.getSelection();
-    const text = sel.toString().trim();
+    const text = selectionText().trim();
     const popover = $('#selection-popover');
     if (!text || sel.rangeCount === 0) { popover.hidden = true; clearLiveSelection(); return; }
     const range = sel.getRangeAt(0);

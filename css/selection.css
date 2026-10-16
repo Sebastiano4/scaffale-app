@@ -14,3 +14,8 @@
 
 /* no grey tap flash or iOS callout on the text: our own gestures handle selection */
 .textLayer span { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
+
+/* reading with a finger: the browser's own selection is off, the app selects word by word
+   (js/reader-touch-select.js); the selection is painted by .sel-live-box */
+body.touch-reading .textLayer,
+body.touch-reading .textLayer span { -webkit-user-select: none; user-select: none; }

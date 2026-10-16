@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { $, el } from './dom.js';
 import { renderReader } from './reader.js';
 import { stopReadAloud } from './reader-tts.js';
+import { selectionText } from './reader-touch-select.js';
 
 const HINT_KEY = 'booknest-immersive-hint';
 // A swipe exits only when it is clearly horizontal, long and quick, so that scrolling
@@ -91,7 +92,7 @@ function initSwipeToExit() {
     const width = scroll.clientWidth || window.innerWidth;
     if (dx < width * SWIPE_MIN_FRACTION || dy > dx * SWIPE_MAX_SLOPE) return;
     if (Date.now() - s.time > SWIPE_MAX_MS) return;
-    if (window.getSelection().toString().trim()) return;
+    if (selectionText().trim()) return;
     exitImmersive();
   });
   scroll.addEventListener('touchcancel', () => { if (start) clearTimeout(start.timer); start = null; });

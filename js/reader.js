@@ -7,6 +7,7 @@ import { loadLibrary } from './library.js';
 import { buildSearchIndex, resetSearchUI } from './reader-search.js';
 import { initReaderTts, stopReadAloud } from './reader-tts.js';
 import { buildTextLayer, clearLiveSelection } from './reader-selection.js';
+import { selectionText } from './reader-touch-select.js';
 
 /* ======================================================================
    Reader
@@ -446,7 +447,7 @@ export function initReader() {
       if (startX == null || state.reader.mode !== 'paginated') return;
       const dx = e.changedTouches[0].clientX - startX;
       const longPress = Date.now() - startTime > 450; // finger rested first: a selection gesture
-      if (longPress || window.getSelection().toString().trim()) { startX = null; return; }
+      if (longPress || selectionText().trim()) { startX = null; return; }
       if (Math.abs(dx) > 60) {
         if (dx < 0) renderSinglePage(state.reader.currentPage + 1);
         else renderSinglePage(state.reader.currentPage - 1);
@@ -456,7 +457,7 @@ export function initReader() {
     // tap near the left/right edge to turn the page (only when nothing is selected)
     scroll.addEventListener('click', (e) => {
       if (state.reader.mode !== 'paginated') return;
-      if (window.getSelection().toString()) return;
+      if (selectionText()) return;
       const rect = scroll.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       if (x < 0.16) renderSinglePage(state.reader.currentPage - 1);

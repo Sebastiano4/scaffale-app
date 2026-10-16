@@ -1,5 +1,5 @@
 /* Bump CACHE_NAME on every release, and list every file the app loads in APP_SHELL. */
-const CACHE_NAME = 'booknest-v19';
+const CACHE_NAME = 'booknest-v20';
 
 const APP_SHELL = [
   './',

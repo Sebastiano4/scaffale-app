@@ -24,37 +24,27 @@ function textLayerOf(node) {
   return e && e.closest ? e.closest('.textLayer') : null;
 }
 
-function within(rect, x, y) {
-  return x >= rect.left - HIT_TOLERANCE && x <= rect.right + HIT_TOLERANCE
-    && y >= rect.top - HIT_TOLERANCE && y <= rect.bottom + HIT_TOLERANCE;
+/* Index of the character under x in a text node, measured on screen (exact with any font,
+   and independent of the browser's own selection, which is off for touch). */
+function charIndexAtX(node, x) {
+  const len = node.textContent.length;
+  const r = document.createRange();
+  for (let i = 0; i < len; i++) {
+    r.setStart(node, i);
+    r.setEnd(node, i + 1);
+    if (x < r.getBoundingClientRect().right) return i;
+  }
+  return len;
 }
 
 /* Text node + offset under a screen point, only if the point is really on text. */
 function caretAt(x, y) {
-  let node = null, offset = 0;
-  if (document.caretRangeFromPoint) {
-    const r = document.caretRangeFromPoint(x, y);
-    if (r) { node = r.startContainer; offset = r.startOffset; }
-  } else if (document.caretPositionFromPoint) {
-    const p = document.caretPositionFromPoint(x, y);
-    if (p) { node = p.offsetNode; offset = p.offset; }
-  }
-  if (node && node.nodeType === 3 && textLayerOf(node) && within(node.parentElement.getBoundingClientRect(), x, y)) {
-    return { node, offset };
-  }
-  // fallback: the span under the point, offset estimated from the horizontal position
-  const span = document.elementsFromPoint(x, y).find((e) => e.matches && e.matches('.textLayer span'));
-  const t = span && span.firstChild;
-  if (!t || t.nodeType !== 3) return null;
-  const b = span.getBoundingClientRect();
-  return { node: t, offset: Math.round(((x - b.left) / Math.max(1, b.width)) * t.textContent.length) };
+  return caretNear(x, y, HIT_TOLERANCE);
 }
 
-/* Like caretAt, but a finger that lands near the text (between lines, past a line's end)
-   snaps to the nearest span within `reach` px. */
+/* The text spot under a point; a finger that lands near the text (between lines, past a
+   line's end) snaps to the nearest span within `reach` px. */
 function caretNear(x, y, reach) {
-  const exact = caretAt(x, y);
-  if (exact) return exact;
   const spans = [];
   for (const wrap of document.querySelectorAll('.pdf-page-wrap')) {
     const w = wrap.getBoundingClientRect();
@@ -69,8 +59,32 @@ function caretNear(x, y, reach) {
   if (i === null) return null;
   const t = spans[i].firstChild;
   const b = rects[i];
-  const frac = Math.min(1, Math.max(0, (x - b.left) / Math.max(1, b.width)));
-  return { node: t, offset: Math.round(frac * t.textContent.length) };
+  const offset = x <= b.left ? 0 : x >= b.right ? t.textContent.length : charIndexAtX(t, x);
+  return { node: t, offset };
+}
+
+/* Text of a range as read on the page: line breaks become newlines. Used instead of
+   Selection.toString(), which is empty while the browser's own selection is turned off. */
+export function rangeText(range) {
+  const root = range.commonAncestorContainer;
+  const walker = document.createTreeWalker(root.nodeType === 3 ? root.parentNode : root,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (n) => ((n.nodeType === 3 || n.nodeName === 'BR') && range.intersectsNode(n) && textLayerOf(n)
+        ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+  let out = '';
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeName === 'BR') { out += '\n'; continue; }
+    const s = n === range.startContainer ? range.startOffset : 0;
+    const e = n === range.endContainer ? range.endOffset : n.textContent.length;
+    out += n.textContent.slice(s, e);
+  }
+  return out;
+}
+
+export function selectionText() {
+  const sel = window.getSelection();
+  return sel.rangeCount > 0 && !sel.isCollapsed ? rangeText(sel.getRangeAt(0)) : '';
 }
 
 function wordRangeAt(x, y, reach = 0) {
@@ -176,7 +190,7 @@ function extendTo(wr) {
 
 function hasSelection() {
   const sel = window.getSelection();
-  return sel.rangeCount > 0 && !sel.isCollapsed && sel.toString().trim() !== '';
+  return sel.rangeCount > 0 && !sel.isCollapsed && selectionText().trim() !== '';
 }
 
 /* Snap a mouse drag selection outward to whole words. */
@@ -204,6 +218,9 @@ function initTouch(scroll) {
   let lastTap = null;   // { x, y, time } for double-tap detection
 
   scroll.addEventListener('touchstart', (e) => {
+    // with a finger only our selection runs: Android's own long-press selection fought it
+    // and jumped across the PDF's text gaps (several lines at once, skipped words)
+    document.body.classList.add('touch-reading');
     if (e.touches.length !== 1) { if (press) clearTimeout(press.timer); press = null; return; }
     const t = e.touches[0];
     const p = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false, longPressed: false };
@@ -296,6 +313,7 @@ function initMouse(scroll) {
   let dragging = false;
   scroll.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    document.body.classList.remove('touch-reading'); // a mouse selects natively again
     const layer = e.target.closest && e.target.closest('.textLayer');
     if (!layer) return;
     dragging = true;
