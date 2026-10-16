@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { $, el } from './dom.js';
 import { renderReader } from './reader.js';
+import { stopReadAloud } from './reader-tts.js';
 
 const HINT_KEY = 'booknest-immersive-hint';
 // A swipe exits only when it is clearly horizontal, long and quick, so that scrolling
@@ -82,6 +83,8 @@ function initSwipeToExit() {
     if (!s || !active) return;
     clearTimeout(s.timer);
     if (s.longPress) return; // finger rested first: that was a selection gesture
+    // pinch-zoomed in: a sideways drag pans the page, it is not an exit swipe
+    if (window.visualViewport && window.visualViewport.scale > 1.01) return;
     const t = e.changedTouches[0];
     const dx = t.clientX - s.x;
     const dy = Math.abs(t.clientY - s.y);
@@ -94,11 +97,31 @@ function initSwipeToExit() {
   scroll.addEventListener('touchcancel', () => { if (start) clearTimeout(start.timer); start = null; });
 }
 
+/* While read-aloud plays, a single small pause button floats over the pages (the top bar
+   with the normal control is hidden). It disappears as soon as reading stops. */
+function initReadAloudPause() {
+  const ttsBtn = $('#read-aloud-btn');
+  if (!ttsBtn) return;
+  const pause = el('button', 'immersive-tts-pause',
+    '<svg viewBox="0 0 24 24" width="20" height="20"><path d="M7 5h4v14H7zm6 0h4v14h-4z" fill="currentColor"/></svg>');
+  pause.type = 'button';
+  pause.setAttribute('aria-label', 'Pause reading aloud');
+  pause.hidden = true;
+  pause.addEventListener('click', () => stopReadAloud());
+  document.body.appendChild(pause);
+  const sync = () => { pause.hidden = ttsBtn.getAttribute('aria-pressed') !== 'true'; };
+  new MutationObserver(sync).observe(ttsBtn, { attributes: true, attributeFilter: ['aria-pressed'] });
+  sync();
+}
+
 export function initImmersive() {
   const btn = $('#immersive-btn');
   if (!btn) return;
   btn.hidden = false;
   btn.addEventListener('click', () => enterImmersive());
+  // reloaded while immersive: our old history entry would make the next "back" do nothing
+  if (history.state && history.state.immersive) history.replaceState(null, '');
+  initReadAloudPause();
 
   initSwipeToExit();
 

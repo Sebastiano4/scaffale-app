@@ -18,6 +18,7 @@ export async function openReader(id) {
   state.reader.book = book;
   state.reader.mode = book.readingMode || 'continuous';
   state.reader.currentPage = book.lastPage || 1;
+  state.reader.openedAtPage = state.reader.currentPage;
   state.reader.textIndex = new Map();
   state.reader.outline = undefined;
 
@@ -113,7 +114,9 @@ function persistProgress() {
     if (!book) return;
     const page = committedPage || currentPage;
     book.lastPage = page;
-    if (!book.finishedAt && book.numPages > 1 && page >= book.numPages) {
+    // only reaching the end during this session finishes a book: reopening one that was
+    // marked unread while sitting on its last page must not re-finish it
+    if (!book.finishedAt && book.numPages > 1 && page >= book.numPages && state.reader.openedAtPage < book.numPages) {
       book.finishedAt = Date.now();
       showToast('Book finished — congratulations!');
     }
@@ -178,10 +181,20 @@ function renderPageToCanvas(page, viewport, wrap) {
   }).promise;
 }
 
-/* ---- rendering: continuous mode ---- */
-export async function renderReader() {
+/* ---- rendering: continuous mode ----
+   Renders are queued: a second render (e.g. leaving immersive mode while it was still
+   drawing) starts only after the first is done, so pages of two modes never mix. */
+let renderQueue = Promise.resolve();
+let renderedWidth = 0; // width of #pdf-scroll the pages were last fitted to
+export function renderReader() {
+  renderQueue = renderQueue.then(doRenderReader, doRenderReader);
+  return renderQueue;
+}
+
+async function doRenderReader() {
   const { pdfDoc, mode } = state.reader;
   if (!pdfDoc) return;
+  renderedWidth = $('#pdf-scroll').clientWidth;
   if (state.reader.io) { state.reader.io.disconnect(); state.reader.io = null; }
   const container = $('#pdf-pages');
   container.innerHTML = '';
@@ -417,11 +430,16 @@ export function initReader() {
   // swipe + edge-tap support in paginated mode
   (() => {
     let startX = null;
+    let startTime = 0;
     const scroll = $('#pdf-scroll');
-    scroll.addEventListener('touchstart', (e) => { if (state.reader.mode === 'paginated') startX = e.touches[0].clientX; }, { passive: true });
+    scroll.addEventListener('touchstart', (e) => {
+      if (state.reader.mode === 'paginated') { startX = e.touches[0].clientX; startTime = Date.now(); }
+    }, { passive: true });
     scroll.addEventListener('touchend', (e) => {
       if (startX == null || state.reader.mode !== 'paginated') return;
       const dx = e.changedTouches[0].clientX - startX;
+      const longPress = Date.now() - startTime > 450; // finger rested first: a selection gesture
+      if (longPress || window.getSelection().toString().trim()) { startX = null; return; }
       if (Math.abs(dx) > 60) {
         if (dx < 0) renderSinglePage(state.reader.currentPage + 1);
         else renderSinglePage(state.reader.currentPage - 1);
@@ -457,11 +475,15 @@ export function initReader() {
     }
   });
 
-  // re-render on resize / rotation so pages always fit the screen
+  // re-render on resize / rotation so pages always fit the screen — only when the width
+  // really changed (entering full screen changes only the height: no need to re-render)
   window.addEventListener('resize', () => {
     if (!state.reader.pdfDoc || !$('#reader-view').classList.contains('view--active')) return;
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => renderReader(), 250);
+    resizeTimer = setTimeout(() => {
+      if ($('#pdf-scroll').clientWidth === renderedWidth) return;
+      renderReader();
+    }, 250);
   });
 
   $('#reader-progress').addEventListener('click', toggleGotoPopover);

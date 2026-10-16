@@ -115,7 +115,7 @@ async function readFrom(n, gen, emptyRun = 0, isStart = false, carry = '') {
   }
   const info = await bookInfo(pdfDoc, n);
   if (stale()) return;
-  if (isStart && info.lang) setBookLang(info.lang);
+  if (isStart) setBookLang(info.lang); // null when unclear: never reuse the previous book's language
   let raw = '';
   try { raw = (await getPageLines(pdfDoc, n)).join('\n'); } catch (e) { /* unreadable page: treat as empty */ }
   if (stale()) return;
@@ -157,9 +157,9 @@ export function stopReadAloud() {
   clearTimeout(pageTimer);
   hlText = '';
   clearHighlight();
+  stopSpeaking(); // also silences the popover's Speak / "Test voice", e.g. when the book closes
   if (!playing) return;
   setPlaying(false);
-  stopSpeaking();
 }
 
 /* ---- settings panel: voice, speed, pitch, test ---- */
@@ -242,7 +242,7 @@ async function openSettings() {
   if (pdfDoc) {
     try {
       const info = await bookInfo(pdfDoc, state.reader.currentPage || 1);
-      if (info.lang) setBookLang(info.lang);
+      setBookLang(info.lang);
     } catch (e) { /* keep navigator.language */ }
   }
   await whenVoicesReady();

@@ -38,16 +38,19 @@ function applyQuoteHighlights(wrap) {
   const n = Number(wrap.dataset.page);
   wrap.querySelectorAll('.quote-highlight-layer').forEach((l) => l.remove());
   wrap.querySelectorAll('.quote-highlight').forEach((s) => s.classList.remove('quote-highlight'));
-  const quotes = (book.quotes || []).filter((q) => q.page === n);
-  if (quotes.length === 0) return;
-
-  const withRects = quotes.filter((q) => Array.isArray(q.rects) && q.rects.length);
-  const legacy = quotes.filter((q) => !(Array.isArray(q.rects) && q.rects.length));
+  // a rect without its own page belongs to the quote's page (quotes saved before
+  // selections could span pages); a quote can also reach onto this page from the previous one
+  const rectPage = (q, r) => (r.page != null ? r.page : q.page);
+  const hasRects = (q) => Array.isArray(q.rects) && q.rects.length;
+  const all = book.quotes || [];
+  const withRects = all.filter((q) => hasRects(q) && q.rects.some((r) => rectPage(q, r) === n));
+  const legacy = all.filter((q) => q.page === n && !hasRects(q));
+  if (withRects.length === 0 && legacy.length === 0) return;
 
   if (withRects.length) {
     const layer = el('div', 'quote-highlight-layer');
     const W = wrap.clientWidth, H = wrap.clientHeight;
-    withRects.forEach((q) => q.rects.forEach((r) => {
+    withRects.forEach((q) => q.rects.filter((r) => rectPage(q, r) === n).forEach((r) => {
       const box = el('div', 'quote-highlight-box');
       box.style.left = (r.x * W) + 'px';
       box.style.top = (r.y * H) + 'px';
@@ -98,26 +101,61 @@ function mergeRectsToLines(rects) {
   return lines.map((L) => ({ left: L.left, right: L.right, top: L.cy - bodyH / 2, bottom: L.cy + bodyH / 2 }));
 }
 
-/* Capture selection rectangles as fractions of the page wrap (0..1), one tidy
-   uniform box per line, so saved highlights match the text precisely. */
-function captureQuoteRects(range, wrap) {
-  if (!range || !wrap) return [];
-  const wr = wrap.getBoundingClientRect();
-  if (!wr.width || !wr.height) return [];
-  const local = [];
-  for (const r of range.getClientRects()) {
-    local.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
+/* Capture selection rectangles as fractions of their page wrap (0..1), one tidy
+   uniform box per line, so saved highlights match the text precisely. A selection
+   can span pages: every rect is measured against, and tagged with, its own page. */
+/* Rects of the selected TEXT only. range.getClientRects() also returns the boxes of every
+   element fully inside the range — across a page break that includes whole page layers,
+   which would paint a highlight over the entire page. */
+function textRects(range) {
+  const root = range.commonAncestorContainer.nodeType === 3
+    ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (range.intersectsNode(n) && n.parentElement && n.parentElement.closest('.textLayer')
+      ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+  });
+  const out = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    if (n === range.startContainer) r.setStart(n, range.startOffset);
+    if (n === range.endContainer) r.setEnd(n, range.endOffset);
+    out.push(...r.getClientRects());
   }
-  return mergeRectsToLines(local).map((L) => ({
-    x: L.left / wr.width,
-    y: L.top / wr.height,
-    w: (L.right - L.left) / wr.width,
-    h: (L.bottom - L.top) / wr.height,
-  }));
+  return out;
+}
+
+function captureQuoteRects(range) {
+  if (!range) return [];
+  const rects = textRects(range);
+  const out = [];
+  document.querySelectorAll('#pdf-pages .pdf-page-wrap').forEach((wrap) => {
+    const wr = wrap.getBoundingClientRect();
+    if (!wr.width || !wr.height) return;
+    const local = [];
+    for (const r of rects) {
+      const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+      if (cx >= wr.left && cx <= wr.right && cy >= wr.top && cy <= wr.bottom) {
+        local.push({ left: r.left - wr.left, top: r.top - wr.top, right: r.right - wr.left, bottom: r.bottom - wr.top });
+      }
+    }
+    const page = Number(wrap.dataset.page);
+    mergeRectsToLines(local).forEach((L) => out.push({
+      page,
+      x: L.left / wr.width,
+      y: L.top / wr.height,
+      w: (L.right - L.left) / wr.width,
+      h: (L.bottom - L.top) / wr.height,
+    }));
+  });
+  return out;
 }
 export function refreshQuoteHighlights(page) {
-  const wrap = document.querySelector(`.pdf-page-wrap[data-page="${page}"]`);
-  if (wrap) applyQuoteHighlights(wrap);
+  // a quote may cover the next page too: refresh every rendered page that shows it
+  document.querySelectorAll('#pdf-pages .pdf-page-wrap').forEach((wrap) => {
+    const n = Number(wrap.dataset.page);
+    if (page == null || n === page || n === page + 1) applyQuoteHighlights(wrap);
+  });
 }
 
 /* ---- live selection overlay ----
@@ -130,7 +168,7 @@ export function clearLiveSelection() {
 function drawLiveSelection(range) {
   clearLiveSelection();
   if (!range) return;
-  const rects = [...range.getClientRects()];
+  const rects = textRects(range);
   if (!rects.length) return;
   document.querySelectorAll('#pdf-pages .pdf-page-wrap').forEach((wrap) => {
     const wr = wrap.getBoundingClientRect();
@@ -195,7 +233,7 @@ export function initReaderSelection() {
     const wrap = anchorNode.closest('.pdf-page-wrap');
     popover.dataset.page = wrap ? wrap.dataset.page : state.reader.currentPage;
     // stash normalized selection rectangles for a precise, zoom-stable highlight
-    popover._rects = wrap ? captureQuoteRects(range, wrap) : [];
+    popover._rects = captureQuoteRects(range);
   });
 
   $('#save-highlight-btn').addEventListener('click', async () => {

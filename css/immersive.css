@@ -15,6 +15,15 @@ body.immersive .page-nav {
 body.immersive #reader-view { height: 100vh; height: 100dvh; }
 body.immersive .pdf-scroll { flex: 1; padding-top: env(safe-area-inset-top, 0px); }
 
+/* pause button for read-aloud: only in immersive mode, only while reading */
+.immersive-tts-pause { display: none; }
+body.immersive .immersive-tts-pause:not([hidden]) {
+  display: grid; place-items: center;
+  position: fixed; right: 16px; bottom: calc(20px + var(--safe-bottom)); z-index: 85;
+  width: 44px; height: 44px; border-radius: 50%; border: 0;
+  background: rgba(20, 23, 31, 0.72); color: #fff; cursor: pointer;
+}
+
 .immersive-hint {
   position: fixed; left: 50%; bottom: calc(40px + var(--safe-bottom));
   transform: translateX(-50%); z-index: 80;
