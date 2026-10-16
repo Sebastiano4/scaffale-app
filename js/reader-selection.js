@@ -16,6 +16,7 @@ export async function buildTextLayer(wrap, textContent, viewport) {
   try {
     const textLayer = new pdfjsLib.TextLayer({ textContentSource: textContent, container: layer, viewport });
     await textLayer.render();
+    layer.appendChild(el('div', 'endOfContent')); // anti-jump target while selecting (see css/selection.css)
     applyQuoteHighlights(wrap);
   } catch (e) { /* selection/search just won't work on this page if it fails */ }
 }
