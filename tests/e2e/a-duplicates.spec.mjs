@@ -32,7 +32,9 @@ test('a legacy book without hash is recognised as duplicate and keeps its fields
   await expect(page.locator('.book-card')).toHaveCount(1);
   const rec = await getRawBook(page, 'legacy1');
   expect(rec.hash).toMatch(/^[0-9a-f]{64}$/);
-  const { hash, fileBlob, ...rest } = rec;
+  // sync bookkeeping (_t stamps) aside, every field is kept
+  const { hash, fileBlob, _t, ...rest } = rec;
+  rest.bookmarks = rest.bookmarks.map(({ _t: t, ...bm }) => bm);
   expect(rest).toEqual(legacyRecord('legacy1', 'My Old Copy'));
   expect(fileBlob).toMatch(/^blob:\d+$/);
 });

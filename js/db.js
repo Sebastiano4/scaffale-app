@@ -1,6 +1,9 @@
 /* ======================================================================
    DB — tiny promise wrapper around IndexedDB
    ====================================================================== */
+import { stampChanges } from './sync-merge.js';
+import { loadSyncState, saveSyncState, notifyChanged } from './sync-state.js';
+
 export const DB = (() => {
   let dbp = null;
   function open() {
@@ -39,7 +42,24 @@ export const DB = (() => {
         r.onerror = () => rej(r.error);
       });
     },
+    /* Saves a book and stamps what changed since the stored copy (for sync between devices). */
     async put(book) {
+      const store = await tx('books', 'readwrite');
+      let changed = false;
+      await new Promise((res, rej) => {
+        const g = store.get(book.id);
+        g.onsuccess = () => {
+          changed = stampChanges(g.result || null, book);
+          const r = store.put(book);
+          r.onsuccess = () => res();
+          r.onerror = () => rej(r.error);
+        };
+        g.onerror = () => rej(g.error);
+      });
+      if (changed) notifyChanged();
+    },
+    /* Saves exactly what it is given (sync applying data from another device). */
+    async putRaw(book) {
       const store = await tx('books', 'readwrite');
       return new Promise((res, rej) => {
         const r = store.put(book);
@@ -47,13 +67,25 @@ export const DB = (() => {
         r.onerror = () => rej(r.error);
       });
     },
-    async delete(id) {
+    /* Deletes a book; the deletion reaches the other devices (tombstone by content hash). */
+    async delete(id, { raw = false } = {}) {
       const store = await tx('books', 'readwrite');
-      return new Promise((res, rej) => {
-        const r = store.delete(id);
-        r.onsuccess = () => res();
-        r.onerror = () => rej(r.error);
+      let hash = null;
+      await new Promise((res, rej) => {
+        const g = store.get(id);
+        g.onsuccess = () => {
+          hash = g.result && g.result.hash;
+          const r = store.delete(id);
+          r.onsuccess = () => res();
+          r.onerror = () => rej(r.error);
+        };
+        g.onerror = () => rej(g.error);
       });
+      if (hash && !raw) {
+        const s = loadSyncState();
+        saveSyncState({ deleted: { ...s.deleted, [hash]: Date.now() } });
+        notifyChanged();
+      }
     },
   };
 })();

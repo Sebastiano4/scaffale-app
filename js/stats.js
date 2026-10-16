@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { $ } from './dom.js';
+import { notifyChanged } from './sync-state.js';
 
 /* ======================================================================
    Reading stats (stored in localStorage)
@@ -10,7 +11,9 @@ export const Stats = {
     try { return JSON.parse(localStorage.getItem(this.key)) || { days: {} }; }
     catch (e) { return { days: {} }; }
   },
-  save(s) { try { localStorage.setItem(this.key, JSON.stringify(s)); } catch (e) { /* full */ } },
+  save(s) { try { localStorage.setItem(this.key, JSON.stringify(s)); } catch (e) { /* full */ } notifyChanged(); },
+  /* written by sync (another device's stats merged in): no change notification */
+  saveRaw(s) { try { localStorage.setItem(this.key, JSON.stringify(s)); } catch (e) { /* full */ } },
   dayKey(offset = 0) {
     const d = new Date(); d.setDate(d.getDate() - offset);
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -44,9 +47,12 @@ export const Stats = {
 /* ---- Reading goal (books or pages, per week or per year) ---- */
 export const Goal = {
   key: 'booknest-goal',
-  load() { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
-  save(g) { try { localStorage.setItem(this.key, JSON.stringify(g)); } catch (e) { /* full */ } },
-  clear() { localStorage.removeItem(this.key); },
+  /* the goal as stored, including a removed one ({ target: 0 }) so the removal can sync */
+  raw() { try { return JSON.parse(localStorage.getItem(this.key)); } catch (e) { return null; } },
+  load() { const g = this.raw(); return g && g.target ? g : null; },
+  save(g) { this.saveRaw({ ...g, savedAt: Date.now() }); notifyChanged(); },
+  saveRaw(g) { try { localStorage.setItem(this.key, JSON.stringify(g)); } catch (e) { /* full */ } },
+  clear() { this.save({ target: 0 }); },
   // returns { done, target, label, pct } or null
   progress(books) {
     const g = this.load();
