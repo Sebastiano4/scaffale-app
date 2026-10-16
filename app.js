@@ -8,6 +8,8 @@ import { initReader } from './js/reader.js';
 import { initReaderSelection } from './js/reader-selection.js';
 import { initReaderPanel } from './js/reader-panel.js';
 import { initReaderSearch } from './js/reader-search.js';
+import { initTouchSelect } from './js/reader-touch-select.js';
+import { initImmersive } from './js/immersive.js';
 
 initTheme();
 initReadingTimeTracking();
@@ -19,6 +21,8 @@ initReader();
 initReaderSelection();
 initReaderPanel();
 initReaderSearch();
+initTouchSelect();
+initImmersive();
 loadLibrary();
 
 if ('serviceWorker' in navigator) {

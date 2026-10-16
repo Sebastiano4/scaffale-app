@@ -17,6 +17,10 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="css/library-extras.css">
 <link rel="stylesheet" href="css/reader-extras.css">
+<link rel="stylesheet" href="css/selection.css">
+<link rel="stylesheet" href="css/immersive.css">
+<link rel="stylesheet" href="css/tts.css">
+<link rel="stylesheet" href="css/shelf.css">
 </head>
 <body>
 
@@ -140,6 +144,8 @@
         </div>
 
         <div id="book-grid" class="book-grid" hidden></div>
+        <!-- Read shelf (finished books) — filled by js/library.js -->
+        <section id="read-shelf" class="read-shelf" hidden></section>
         <div id="card-menu" class="card-menu" hidden>
           <button type="button" data-action="edit">Edit</button>
           <button type="button" data-action="delete" class="card-menu__danger">Delete</button>
@@ -187,6 +193,9 @@
         </button>
         <button id="mode-toggle" class="icon-btn" aria-label="Change reading mode">
           <svg viewBox="0 0 24 24" width="18" height="18"><path id="mode-icon" fill="currentColor" d="M4 4h16v2H4zm0 7h16v2H4zm0 7h16v2H4z"/></svg>
+        </button>
+        <button id="immersive-btn" class="icon-btn" aria-label="Immersive mode" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
         </button>
       </div>
     </header>
@@ -237,6 +246,9 @@
       </label>
       <button id="appearance-reset" class="appearance-reset" type="button">Reset values</button>
     </div>
+
+    <!-- Read-aloud settings (voice, speed, pitch) — filled by js/reader-tts.js -->
+    <div id="tts-settings" class="tts-settings" hidden></div>
 
     <div id="pdf-scroll" class="pdf-scroll">
       <div id="pdf-pages" class="pdf-pages"></div>
