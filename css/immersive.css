@@ -1,1 +1,30 @@
-/* immersive */
+/* immersive: only the pages, full screen */
+body.immersive .reader-topbar,
+body.immersive #page-progress-bar,
+body.immersive #reader-search-bar,
+body.immersive #search-progress,
+body.immersive #search-results,
+body.immersive #goto-popover,
+body.immersive #appearance-popover,
+body.immersive #tts-settings,
+body.immersive #side-panel,
+body.immersive .zoom-controls,
+body.immersive .page-nav {
+  display: none !important;
+}
+body.immersive #reader-view { height: 100vh; height: 100dvh; }
+body.immersive .pdf-scroll { flex: 1; padding-top: env(safe-area-inset-top, 0px); }
+
+.immersive-hint {
+  position: fixed; left: 50%; bottom: calc(40px + var(--safe-bottom));
+  transform: translateX(-50%); z-index: 80;
+  padding: 10px 16px; border-radius: 999px;
+  background: rgba(20, 23, 31, 0.86); color: #fff;
+  font: 500 14px var(--font-body); pointer-events: none;
+  animation: immersive-hint 2s ease forwards;
+}
+@keyframes immersive-hint {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  12%, 80% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; }
+}
