@@ -165,8 +165,6 @@
       <button type="button" id="selection-cancel" class="btn btn--ghost btn--sm">Cancel</button>
       <button type="button" id="selection-delete" class="btn btn--primary btn--sm" disabled>Delete</button>
     </div>
-
-    <div id="toast" class="toast" hidden></div>
   </section>
 
   <!-- READER VIEW -->
@@ -305,6 +303,9 @@
       <div id="outline-list" class="side-panel__list" hidden></div>
     </div>
   </section>
+
+  <!-- Toast: outside both views so messages show in the library AND in the reader -->
+  <div id="toast" class="toast" hidden></div>
 
   <!-- Library menu -->
   <div id="library-menu" class="modal" hidden>
