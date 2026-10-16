@@ -1,1 +1,16 @@
-/* selection */
+/* selection: pdf.js anti-jump technique. While a mouse drag is in progress the empty
+   .endOfContent element covers the whole layer, so moving across gaps between text
+   spans no longer makes the selection jump to the start or end of the page. */
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.textLayer.selecting .endOfContent { top: 0; }
+
+/* no grey tap flash or iOS callout on the text: our own gestures handle selection */
+.textLayer span { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
